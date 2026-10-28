@@ -1,10 +1,11 @@
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
 const DIR = process.env.SESSION_CONSOLE_DIR || join(homedir(), ".config", "session-console");
+const TAILSCALE_APP = "/Applications/Tailscale.app/Contents/MacOS/Tailscale";
 
 /**
  * Every file under DIR has exactly one writer process; every other process only reads it. So the CLI and the
@@ -20,6 +21,8 @@ export const PATHS = {
   logins: join(DIR, "logins.jsonl"), // writer: server, append-only
   claudeProjects: join(homedir(), ".claude", "projects"),
   webDist: new URL("../../web/dist/", import.meta.url).pathname,
+  /** The Mac app's CLI (spec 4.5), else `tailscale` on PATH. */
+  tailscale: existsSync(TAILSCALE_APP) ? TAILSCALE_APP : "tailscale",
 } as const;
 
 /** scrypt N=2^15, r=8, p=1 with a 16-byte salt (spec 10). salt and hash are base64. */

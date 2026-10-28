@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import type { ScryptOptions } from "node:crypto";
-import { existsSync } from "node:fs";
 import { appendFile, mkdir, open } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { isIP } from "node:net";
@@ -94,7 +93,7 @@ export function createAuth(deps: { config: FileCell<ConsoleConfig | null>; flags
 
   async function lookupDevice(ip: string): Promise<string | null> {
     try {
-      const { stdout } = await promisify(execFile)(tailscaleBin(), ["whois", "--json", ip], { timeout: 3000 });
+      const { stdout } = await promisify(execFile)(PATHS.tailscale, ["whois", "--json", ip], { timeout: 3000 });
       const node = (JSON.parse(stdout) as { Node?: { ComputedName?: unknown; Name?: unknown } }).Node;
       const name = typeof node?.ComputedName === "string" && node.ComputedName ? node.ComputedName : typeof node?.Name === "string" ? node.Name.split(".")[0] : "";
       return name || null;
@@ -316,9 +315,3 @@ const DEVICE_KINDS: readonly [RegExp, string][] = [
   [/Linux/, "Linux"],
 ];
 const deviceKind = (userAgent: string): string => DEVICE_KINDS.find(([re]) => re.test(userAgent))?.[1] ?? "unknown";
-
-let tailscalePath: string | null = null;
-function tailscaleBin(): string {
-  tailscalePath ??= existsSync("/Applications/Tailscale.app/Contents/MacOS/Tailscale") ? "/Applications/Tailscale.app/Contents/MacOS/Tailscale" : "tailscale";
-  return tailscalePath;
-}
