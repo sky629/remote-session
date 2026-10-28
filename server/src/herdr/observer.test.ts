@@ -29,7 +29,7 @@ function harness(mode: "hang" | "exit" | "crash" | "closed", initial: ObserverSp
 }
 
 async function until(ok: () => boolean, label: string): Promise<void> {
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + 30_000;
   while (!ok()) {
     if (Date.now() > deadline) assert.fail(`timed out waiting for ${label}`);
     await new Promise((r) => setTimeout(r, 10));

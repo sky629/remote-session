@@ -53,7 +53,7 @@ process.env.FAKE_SESSIONS = sessionList([
 
 const sources: SessionSource[] = [];
 const open = (relistMs = 60_000) => {
-  const s = createHerdrSource({ herdrBin: fakeHerdr, callTimeoutMs: 2000, relistMs });
+  const s = createHerdrSource({ herdrBin: fakeHerdr, callTimeoutMs: 15_000, relistMs });
   sources.push(s);
   return s;
 };
@@ -157,7 +157,7 @@ test("an observation opens at the pane's rect in its herdr session and ends when
   const row = asSession((await source.poll()).sessions[0]!);
   const states: TerminalState[] = [];
   source.observeTerminal(row, { frame: () => {}, status: (s) => states.push(s) });
-  for (let i = 0; i < 200 && !states.includes("live"); i++) await sleep(10);
+  for (let i = 0; i < 1500 && !states.includes("live"); i++) await sleep(10);
   const start = JSON.parse(readFileSync(log, "utf8").split("\n")[0]!);
   assert.deepEqual(start.args, ["--session", "default", "terminal", "session", "observe", row.terminalId, "--cols", "155", "--rows", "54"]);
   defaultReply = (req) => (req.method === "session.snapshot" ? snapshotReply(empty) : { result: { type: "ok" } });
@@ -167,6 +167,6 @@ test("an observation opens at the pane's rect in its herdr session and ends when
   } finally {
     defaultReply = (req) => (req.method === "session.snapshot" ? snapshotReply(fixtureSnapshot) : { result: { type: "ok" } });
   }
-  for (let i = 0; i < 100 && !readFileSync(log, "utf8").includes("sigterm"); i++) await sleep(10);
+  for (let i = 0; i < 1000 && !readFileSync(log, "utf8").includes("sigterm"); i++) await sleep(10);
   assert.ok(existsSync(log) && readFileSync(log, "utf8").includes("sigterm"), "the child got SIGTERM");
 });

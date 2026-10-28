@@ -4,7 +4,7 @@ import { createServer } from "node:net";
 import type { Server, Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { openHerdrSocket } from "./socket.ts";
 
 type Handler = (req: { id: string; method: string; params: unknown }, sock: Socket) => void;
@@ -100,26 +100,32 @@ test("a socket nobody listens on is unreachable, and close() ends calls in fligh
 });
 
 test("after a failed connect, calls inside the backoff window never connect; the window doubles, a good reply resets it", async () => {
-  const path = sockPath();
-  const s = openHerdrSocket(path, 1000);
-  const code = async () => {
-    const r = await s.call("ping", {});
-    return r.ok ? "ok" : r.code;
-  };
-  assert.equal(await code(), "unreachable", "first failure opens a 0.5 s window");
-  await sleep(550);
-  assert.equal(await code(), "unreachable", "second failure opens a 1 s window");
-  const { server, connections } = await fakeHerdr(path, (req, sock) => reply(sock, { id: req.id, result: {} }));
-  await sleep(500);
-  assert.equal(await code(), "unreachable", "still inside the 1 s window");
-  assert.equal(connections(), 0, "no connection was attempted inside the window");
-  await sleep(550);
-  assert.equal(await code(), "ok");
-  assert.equal(connections(), 1);
-  await new Promise((r) => server.close(r));
-  assert.equal(await code(), "unreachable");
-  const again = await fakeHerdr(path, (req, sock) => reply(sock, { id: req.id, result: {} }));
-  await sleep(550);
-  assert.equal(await code(), "ok", "the good reply reset the window to 0.5 s, not 2 s");
-  again.server.close();
+  // Only Date is mocked: the window is measured on the clock, while socket I/O stays real.
+  mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+  try {
+    const path = sockPath();
+    const s = openHerdrSocket(path, 1000);
+    const code = async () => {
+      const r = await s.call("ping", {});
+      return r.ok ? "ok" : r.code;
+    };
+    assert.equal(await code(), "unreachable", "first failure opens a 0.5 s window");
+    mock.timers.tick(501);
+    assert.equal(await code(), "unreachable", "second failure opens a 1 s window");
+    const { server, connections } = await fakeHerdr(path, (req, sock) => reply(sock, { id: req.id, result: {} }));
+    mock.timers.tick(999);
+    assert.equal(await code(), "unreachable", "still inside the 1 s window");
+    assert.equal(connections(), 0, "no connection was attempted inside the window");
+    mock.timers.tick(2);
+    assert.equal(await code(), "ok");
+    assert.equal(connections(), 1);
+    await new Promise((r) => server.close(r));
+    assert.equal(await code(), "unreachable");
+    const again = await fakeHerdr(path, (req, sock) => reply(sock, { id: req.id, result: {} }));
+    mock.timers.tick(501);
+    assert.equal(await code(), "ok", "the good reply reset the window to 0.5 s, not 2 s");
+    again.server.close();
+  } finally {
+    mock.timers.reset();
+  }
 });

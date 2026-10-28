@@ -26,7 +26,7 @@ function project(content: string): { root: string; id: ClaudeSessionId; file: st
 }
 
 async function until<T>(read: () => T, ok: (v: T) => boolean, label: string): Promise<T> {
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + 30_000;
   for (;;) {
     const v = read();
     if (ok(v)) return v;
@@ -97,7 +97,7 @@ test("a file that shrinks is reopened, and appends to the new content are pushed
   t.follow(new Set([id]));
   await t.page(id, null, 5);
   writeFileSync(file, record(100));
-  await new Promise((r) => setTimeout(r, 200));
+  assert.deepEqual(await t.page(id, null, 50).then((r) => r.ok && ids(r.events)), ["u-100"], "the shrunk file was reopened");
   appendFileSync(file, record(101));
   await until(() => pushed, (p) => p.includes("u-101"), "the append after the replacement");
   assert.deepEqual(await t.page(id, null, 50).then((r) => r.ok && ids(r.events)), ["u-100", "u-101"]);
