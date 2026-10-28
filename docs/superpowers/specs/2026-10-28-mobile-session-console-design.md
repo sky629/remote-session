@@ -19,6 +19,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 3. Claude가 승인을 기다리면 대화 화면에 승인 카드가 뜨고, 버튼 한 번으로 답할 수 있다.
 4. 터미널 탭으로 전환하면 그 세션의 실제 터미널 화면을 폰 크기로 볼 수 있고, Esc, Enter, Ctrl+C, 화살표, 숫자 같은 키를 보낼 수 있다.
 5. 홈 화면에 추가하면 앱처럼 열린다.
+6. 첫 화면은 로그인이다. 암호를 모르면 테일넷 안에 있어도 세션 목록을 볼 수 없다. 한 번 로그인하면 정한 기간 동안 유지된다.
 
 ### 비목표 (1차에서 뺀다)
 
@@ -31,6 +32,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 ### 실패 조건
 
 - 테일넷 밖에서 접속할 수 있다.
+- 로그인하지 않은 상태에서 세션 목록, 대화, 터미널 중 하나라도 보이거나, API가 데이터를 돌려준다.
 - 폰에서 보낸 메시지가 Mac 화면의 Claude Code에 보이지 않거나, 두 번 들어간다.
 - 승인 버튼이 다른 선택지에 눌린다.
 - 서비스를 켜 둔 것만으로 Mac의 cmux나 herdr 동작이 바뀐다. (설정 변경, 포커스 이동, 터미널 크기 변경 모두 금지)
@@ -89,7 +91,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 
 - 버전 1.104.2. 이 Mac의 MagicDNS 이름은 `macbookpro.tailfdccb7.ts.net`, 테일넷 `kkt629@gmail.com`. 아이폰 `iphone181`이 같은 테일넷에 있다.
 - CLI 경로: `/Applications/Tailscale.app/Contents/MacOS/Tailscale`. `serve --bg`, `whois`, `cert`를 지원한다.
-- `tailscale status --json`의 `CertDomains`가 비어 있다. 테일넷에 HTTPS 인증서가 아직 켜져 있지 않다는 뜻이다. **사용자가 Tailscale 관리 콘솔 DNS 탭에서 HTTPS Certificates를 켜야 한다.** 이것은 사용자가 해야 하는 유일한 외부 작업이다. 켜지 않으면 `tailscale serve`가 실패한다.
+- `tailscale status --json`의 `CertDomains`가 비어 있다. 테일넷에 HTTPS 인증서가 아직 켜져 있지 않을 가능성이 높다(추정). **사용자가 Tailscale 관리 콘솔의 DNS 페이지에서 HTTPS Certificates 항목의 "Enable HTTPS"를 켜야 한다.** MagicDNS는 이미 켜져 있다. 이것은 사용자가 해야 하는 유일한 외부 작업이다. 빌더는 `tailscale serve --bg <port>`가 성공하는지로 확인한다. 실패하면 그 오류 메시지를 사용자에게 그대로 전달한다.
 - Tailscale Serve를 거친 HTTP 요청에는 `Tailscale-User-Login`, `Tailscale-User-Name` 헤더가 붙는다. WebSocket 업그레이드도 Serve가 중계한다.
 
 ### 4.6 런타임
@@ -103,6 +105,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 
 - 폰에서 Claude와 주고받는 방식은 **C: 대화 화면이 기본, 터미널 탭을 추가**한다.
 - 접속 경로는 Tailscale이다.
+- **첫 화면에 로그인이 있어야 한다.** 테일넷에 들어온 기기라도 암호 없이는 아무것도 볼 수 없다.
 
 ### 5.2 작성자(Claude)가 정한 것. 사용자가 바꿀 수 있다.
 
@@ -115,7 +118,9 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 | 입력 전달 | 메시지는 `agent.prompt`, 키는 `agent.send_keys` | herdr가 bracketed paste와 Enter를 한 번에 처리하고, `blocked` 상태면 `agent_blocked`로 거부해 준다. 터미널에 직접 쓰지 않는다. |
 | 승인 응답 | `agent.read --source detection` 텍스트에서 번호 선택지를 뽑아 버튼으로 보여 주고, 누르면 그 숫자 키를 `agent.send_keys`로 보낸다. 선택지를 못 뽑으면 원문 텍스트와 범용 키(1, 2, 3, Enter, Esc, y, n)를 보여 준다. | Claude Code 승인 대화상자는 숫자 키로 선택된다. 인식 실패를 숨기지 않기 위해 원문을 항상 함께 보여 준다. |
 | 터미널 탭 | `herdr terminal session observe`의 프레임을 WebSocket으로 그대로 전달하고, 폰에서 xterm.js가 그린다 | 읽기 전용 관찰자라 Mac 화면에 영향이 없다. 입력은 `agent.send_keys`로 보낸다. |
-| 인증 | 서버는 127.0.0.1에만 바인드한다. 모든 요청에서 `Tailscale-User-Login` 헤더가 설정 파일의 소유자 로그인(`kkt629@gmail.com`)과 같은지 검사한다. | Serve를 거치지 않은 요청은 헤더가 없어서 거부된다. 로컬에서 직접 붙는 요청도 헤더가 없으므로 개발 시에는 환경 변수로 인증을 끈다. |
+| 인증 1차 관문 | 서버는 127.0.0.1에만 바인드한다. 모든 요청에서 `Tailscale-User-Login` 헤더가 설정 파일의 소유자 로그인(`kkt629@gmail.com`)과 같은지 검사한다. 아니면 403. | Serve를 거치지 않은 요청은 헤더가 없어서 거부된다. 로컬에서 직접 붙는 요청도 헤더가 없으므로 개발 시에는 환경 변수로 이 관문만 끈다. |
+| 인증 2차 관문 (로그인) | 암호(passphrase) 하나를 서버 설정에 scrypt 해시로 저장한다. 로그인 화면에서 암호를 맞히면 서버가 무작위 세션 토큰을 만들어 `HttpOnly; Secure; SameSite=Strict` 쿠키로 준다. 유효 기간은 30일이고, 서버가 토큰 목록을 파일에 저장해서 재시작해도 유지된다. 로그아웃은 그 토큰을 지운다. 실패는 IP당 분당 5회로 제한한다. | 사용자 요구다. 폰을 잃어버리거나 테일넷에 다른 기기가 들어와도 암호 없이는 세션을 볼 수 없다. WebAuthn(Face ID)은 더 좋지만 구현량이 커서 후속으로 미룬다. |
+| 암호 설정 | `pnpm setup`이 터미널에서 암호를 두 번 받아 해시를 설정 파일(`~/.config/session-console/config.json`, 권한 600)에 쓴다. 평문 암호는 어디에도 저장하지 않는다. | 서버를 처음 켜기 전에 한 번만 하면 된다. 바꾸고 싶으면 다시 실행한다. |
 | 백엔드 | Node 24 + TypeScript(빌드 없음), `node:http` + `ws` | 라우트가 몇 개 없다. 프레임워크를 들이지 않는다. |
 | 프런트엔드 | Vite + TypeScript + Preact, xterm.js | 작고 빠르다. PWA manifest와 최소 service worker(설치 가능하게만)를 넣는다. |
 | 실행 | `pnpm start`로 전경 실행. launchd 등록은 1차에서 뺀다. 필요하면 후속으로 한다. | 먼저 손으로 켜고 끄며 검증한다. |
@@ -178,7 +183,20 @@ type ChatEvent =
 
 herdr가 주는 레코드를 필드 그대로 전달한다. `{seq, full, width, height, bytes(base64)}`.
 
-### 6.5 폰 → 서버 명령
+### 6.5 `AuthSession` (로그인 상태)
+
+```ts
+interface AuthSession {
+  tokenHash: string;     // 쿠키 토큰의 sha256. 원문 토큰은 쿠키에만 있다.
+  createdAt: string;
+  expiresAt: string;     // createdAt + 30일
+  userAgent: string;     // 어느 기기인지 사람이 알아보기 위한 표시용
+}
+```
+
+서버는 `AuthSession[]`을 설정 디렉터리의 파일에 저장한다. 만료된 항목은 읽을 때 지운다.
+
+### 6.6 폰 → 서버 명령
 
 ```ts
 type Command =
@@ -195,7 +213,8 @@ type Command =
    │ HTTPS + WebSocket, Tailscale Serve가 중계, Tailscale-User-Login 헤더 부착
    ▼
 server/  (Node 24, 127.0.0.1:PORT)
-   ├─ auth        : 헤더 검사. 실패는 403.
+   ├─ auth        : 1차 Tailscale 헤더 검사(실패 403) → 2차 로그인 쿠키 검사(실패 401, 로그인 화면으로).
+   │                `/api/login`, 정적 파일, manifest만 2차 관문 없이 통과한다.
    ├─ herdr       : 소켓 클라이언트. 세션별 소켓, 요청 id 매칭, 재연결.
    ├─ sessions    : 1.5초 폴링 → Session[] 계산 → 변경분만 WebSocket으로 push.
    ├─ transcript  : 세션 id로 jsonl 찾기, 끝에서부터 읽기, fs.watch 증분 파싱 → ChatEvent[].
@@ -207,7 +226,10 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 
 ### 7.1 서버 ↔ 폰 프로토콜
 
-- `GET /api/sessions` → `Session[]`. 첫 화면용.
+- `POST /api/login` `{passphrase}` → 200이면 쿠키 설정, 401이면 `{error:"wrong_passphrase"}`, 429면 잠시 후 다시. 2차 관문 없이 열린 유일한 API다.
+- `POST /api/logout` → 쿠키의 토큰을 지운다.
+- `GET /api/me` → `{loggedIn: boolean, tailscaleLogin: string}`. 앱이 켜질 때 로그인 화면을 보일지 정한다.
+- `GET /api/sessions` → `Session[]`. 목록 화면용.
 - `GET /api/sessions/:id/chat?before=<uuid>&limit=50` → `ChatEvent[]`. 위로 스크롤하면 더 읽는다.
 - `GET /api/sessions/:id/blocked` → `{ text: string; options: {key: string; label: string}[] }`. `detection` 소스 텍스트와 파싱된 선택지.
 - `WS /ws` → 서버가 `{type:"sessions", sessions}`, `{type:"chat", sessionId, events}`, `{type:"frame", sessionId, frame}`, `{type:"command_result", requestId, ok, error?}`를 보낸다. 폰은 `Command`에 `requestId`를 붙여 보낸다.
@@ -222,8 +244,9 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 
 ## 8. 화면
 
-세 화면이다. 목업: https://claude.ai/artifact/Ear2krffWbpSF4VvE3RWEy
+네 화면이다. 목업: https://claude.ai/artifact/Ear2krffWbpSF4VvE3RWEy
 
+0. **로그인.** 앱 이름, 접속한 Tailscale 계정 표시(1차 관문을 통과했다는 뜻), 암호 입력란, "로그인" 버튼. 틀리면 입력란 아래에 "암호가 다릅니다"를 보여 주고 입력을 비우지 않는다. 로그인에 성공하면 세션 목록으로 간다. 쿠키가 살아 있으면 이 화면을 건너뛴다. 세션 목록 화면 상단 메뉴에 로그아웃을 둔다.
 1. **세션 목록.** herdr 세션별로 묶는다. 한 줄에 워크스페이스 라벨, 상태 표시, 제목, 짧은 경로(`~/.herdr/worktrees/rocket/remove-lab`). `blocked`는 맨 위, 테두리 강조. 상단에 "N 작업 중" 요약.
 2. **대화.** 헤더에 뒤로가기, 라벨, 상태 표시, 탭(대화 | 터미널). 본문은 사용자 말풍선(오른쪽), Claude 말풍선(왼쪽), 접힌 도구 묶음 칩. `blocked`면 하단에 승인 카드(원문 텍스트 + 선택지 버튼). 하단 입력창은 6.2 표를 따른다. 새 이벤트가 오면 맨 아래에 있을 때만 자동 스크롤한다.
 3. **터미널.** xterm.js 뷰. 폰 가로폭에 맞는 cols와 rows를 계산해 `watch_terminal`로 보낸다. 하단에 키 버튼 줄(Esc, Enter, Ctrl+C, ↑, ↓, Tab, 1, 2, 3). 가로 모드에서는 cols를 다시 계산해 다시 구독한다.
@@ -246,7 +269,11 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 ## 10. 보안
 
 - 서버는 `127.0.0.1`에만 바인드한다. Tailscale Serve가 `https://macbookpro.tailfdccb7.ts.net`에서 이 포트로 프록시한다. `tailscale funnel`은 쓰지 않는다.
-- 모든 HTTP 요청과 WebSocket 업그레이드에서 `Tailscale-User-Login`이 설정의 소유자와 같아야 한다. 아니면 403. 개발용 우회는 환경 변수 `CONSOLE_DEV_NO_AUTH=1`로만 켠다.
+- 1차 관문: 모든 HTTP 요청과 WebSocket 업그레이드에서 `Tailscale-User-Login`이 설정의 소유자와 같아야 한다. 아니면 403. 개발용 우회는 환경 변수 `CONSOLE_DEV_NO_TAILSCALE=1`로만 켠다. 로그인 관문에는 우회가 없다.
+- 2차 관문: `/api/login`, 로그인 화면의 정적 파일, manifest를 뺀 모든 요청과 WebSocket 업그레이드에 유효한 로그인 쿠키가 있어야 한다. 없으면 401이고, 앱은 로그인 화면으로 돌아간다.
+- 암호는 scrypt(N=2^15, r=8, p=1, 16바이트 salt)로 해시해서 저장한다. 비교는 상수 시간 비교를 쓴다. 토큰은 32바이트 무작위 값이고, 서버에는 sha256만 저장한다.
+- 쿠키는 `HttpOnly; Secure; SameSite=Strict; Path=/`이고 Max-Age는 30일이다. 개발용 HTTP 접속에서는 `Secure`를 뺀다.
+- 로그인 실패는 IP당 분당 5회까지만 받고, 넘으면 429와 함께 60초를 기다리게 한다.
 - 폰에서 들어온 텍스트는 herdr에 그대로 넘긴다. 셸을 거치지 않는다(`agent.prompt`는 소켓 JSON이다).
 - transcript 파일은 읽기만 한다. `~/.claude/projects` 밖의 경로는 열지 않는다.
 - 로그에 메시지 본문을 남기지 않는다.
@@ -263,7 +290,8 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 
 ## 12. 검증 기준 (완료 선언 전에 실제로 확인한다)
 
-1. Mac에서 `pnpm start`를 켜고 `tailscale serve --bg <port>`를 등록한 뒤, 아이폰 Safari로 `https://macbookpro.tailfdccb7.ts.net`에 들어가면 목록에 현재 herdr 에이전트들이 실제 라벨과 상태로 보인다.
+1. Mac에서 `pnpm setup`으로 암호를 정하고 `pnpm start`를 켠 뒤 `tailscale serve --bg <port>`를 등록한다. 아이폰 Safari로 `https://macbookpro.tailfdccb7.ts.net`에 들어가면 로그인 화면이 먼저 보인다. 틀린 암호는 거부되고, 맞는 암호를 넣으면 목록에 현재 herdr 에이전트들이 실제 라벨과 상태로 보인다. Safari를 완전히 닫았다가 다시 열어도 로그인 화면 없이 목록이 보인다.
+1-1. 로그인 쿠키 없이 `curl -H 'Tailscale-User-Login: kkt629@gmail.com' http://127.0.0.1:<port>/api/sessions`를 치면 401이다. 틀린 암호로 `/api/login`을 6번 연속 치면 여섯 번째는 429다.
 2. Mac에서 한 세션에 프롬프트를 쳐서 `working`으로 바꾸면 폰 목록이 2초 안에 바뀐다.
 3. 폰에서 대기 중인 세션에 "현재 작업 디렉터리를 한 줄로 알려줘" 같은 메시지를 보내면, Mac의 Claude Code 화면에 그 메시지가 한 번 들어가고 응답이 폰 대화 화면에 나타난다.
 4. Claude가 승인을 기다리는 상태를 만들고(예: 허용되지 않은 Bash 명령), 폰에 승인 카드가 뜨고, 버튼을 누르면 Mac 화면에서 그 선택지가 선택된다.
