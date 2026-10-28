@@ -59,6 +59,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 - 쓰는 메서드와 파라미터는 9절 표에 있다. 전체 스키마는 `herdr api schema --json`으로 뽑는다(약 270KB).
 - `events.subscribe`는 구독마다 `pane_id`가 필수다. 전체 세션에 대한 구독은 없다.
 - `herdr terminal session observe <terminal_id> --cols N --rows N`은 읽기 전용 관찰자다. 입력, 크기 변경, 포커스를 가져가지 않는다. 출력은 줄 단위 JSON `{"type":"terminal.frame","seq","full","width","height","encoding":"base64","bytes"}`이고, bytes는 ANSI 이스케이프가 포함된 화면 바이트다. 첫 프레임은 전체 화면이고, 이후는 변경 시에만 온다. 3초 관찰 동안 작업 중인 에이전트는 프레임 1개를 보냈다.
+- **`--cols`/`--rows`는 PTY 크기를 바꾸지 않고 화면을 잘라서 보낸다(확인함).** pane이 155×54인 터미널을 `--cols 60 --rows 24`로 관찰하면 프레임 메타는 `width:60,height:24`이고, 내용은 왼쪽 위 60칸×24줄만 온다(줄은 60칸에서 잘리고, 51행에 있는 프롬프트는 보이지 않는다). `--cols 155 --rows 54`로 관찰하면 전체 화면이 그대로 온다. 관찰 전후로 모든 pane 크기는 155×54로 변하지 않았다. 따라서 **관찰자는 항상 pane의 실제 크기(`layouts[].panes[].rect`)로 연다.**
 
 ### 4.3 에이전트 레코드
 
@@ -115,9 +116,9 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 | 상태 갱신 방식 | `session.snapshot`을 클라이언트가 붙어 있는 동안만 1.5초 간격으로 폴링. 이벤트 구독은 쓰지 않는다. | 스냅샷은 12KB 수준이고 구독은 pane마다 따로 열어야 한다. 사용자 한 명의 폰 UI에는 폴링이 더 단순하고 충분하다. 지연이 문제로 확인되면 그때 pane별 `pane.agent_status_changed` 구독을 더한다. |
 | 대화 데이터 | transcript 파일을 직접 읽는다 | Claude Code가 쓰는 원본이다. `agent.read`는 화면 텍스트라서 대화 구조가 없다. |
 | 대화 갱신 | `fs.watch`로 파일 변경을 감지하고 추가된 바이트만 파싱 | 280MB 파일을 다시 읽지 않기 위해서다. |
-| 입력 전달 | 메시지는 `agent.prompt`, 키는 `agent.send_keys` | herdr가 bracketed paste와 Enter를 한 번에 처리하고, `blocked` 상태면 `agent_blocked`로 거부해 준다. 터미널에 직접 쓰지 않는다. |
+| 입력 전달 | 메시지는 `agent.prompt`, 키는 `agent.send_keys`. 예외는 터미널 탭의 글자 입력란 하나뿐이고, 그것만 `pane.send_text`(Enter를 붙이지 않는 저수준 쓰기)를 쓴다. | herdr가 bracketed paste와 Enter를 한 번에 처리하고, `blocked` 상태면 `agent_blocked`로 거부해 준다. 대화 화면은 절대 터미널에 직접 쓰지 않는다. 터미널 탭은 정의상 날것의 화면이므로, 승인 대화상자의 "다르게 하라고 알려주기" 같은 글자 입력을 여기서만 허용한다. |
 | 승인 응답 | `agent.read --source detection` 텍스트에서 번호 선택지를 뽑아 버튼으로 보여 주고, 누르면 그 숫자 키를 `agent.send_keys`로 보낸다. 선택지를 못 뽑으면 원문 텍스트와 범용 키(1, 2, 3, Enter, Esc, y, n)를 보여 준다. | Claude Code 승인 대화상자는 숫자 키로 선택된다. 인식 실패를 숨기지 않기 위해 원문을 항상 함께 보여 준다. |
-| 터미널 탭 | `herdr terminal session observe`의 프레임을 WebSocket으로 그대로 전달하고, 폰에서 xterm.js가 그린다 | 읽기 전용 관찰자라 Mac 화면에 영향이 없다. 입력은 `agent.send_keys`로 보낸다. |
+| 터미널 탭 | `herdr terminal session observe`를 **pane의 실제 크기**로 열고, 프레임을 WebSocket으로 그대로 전달한다. 폰에서 xterm.js를 같은 크기(예: 155×54)로 만들고, 기본은 폰 폭에 맞춰 축소(CSS transform scale)해서 전체를 보여 주며, 토글로 원래 크기 + 가로 스크롤로 바꾼다. | 관찰자는 요청한 크기로 화면을 자르기만 하므로(4.2절), 폰 크기로 열면 프롬프트 줄이 잘려 나간다. 읽기 전용 관찰자라 Mac 화면에 영향이 없다. 키는 `agent.send_keys`, 글자는 입력란에서 `pane.send_text`로 보낸다. |
 | 인증 1차 관문 | 서버는 127.0.0.1에만 바인드한다. 모든 요청에서 `Tailscale-User-Login` 헤더가 설정 파일의 소유자 로그인(`kkt629@gmail.com`)과 같은지 검사한다. 아니면 403. | Serve를 거치지 않은 요청은 헤더가 없어서 거부된다. 로컬에서 직접 붙는 요청도 헤더가 없으므로 개발 시에는 환경 변수로 이 관문만 끈다. |
 | 인증 2차 관문 (로그인) | 암호(passphrase) 하나를 서버 설정에 scrypt 해시로 저장한다. 로그인 화면에서 암호를 맞히면 서버가 무작위 세션 토큰을 만들어 `HttpOnly; Secure; SameSite=Strict` 쿠키로 준다. 유효 기간은 30일이고, 서버가 토큰 목록을 파일에 저장해서 재시작해도 유지된다. 로그아웃은 그 토큰을 지운다. 실패는 IP당 분당 5회로 제한한다. | 사용자 요구다. 폰을 잃어버리거나 테일넷에 다른 기기가 들어와도 암호 없이는 세션을 볼 수 없다. WebAuthn(Face ID)은 더 좋지만 구현량이 커서 후속으로 미룬다. |
 | 암호 설정 | `pnpm setup`이 터미널에서 암호를 두 번 받아 해시를 설정 파일(`~/.config/session-console/config.json`, 권한 600)에 쓴다. 평문 암호는 어디에도 저장하지 않는다. | 서버를 처음 켜기 전에 한 번만 하면 된다. 바꾸고 싶으면 다시 실행한다. |
@@ -202,9 +203,12 @@ interface AuthSession {
 type Command =
   | { type: "prompt"; sessionId: string; text: string }
   | { type: "keys";   sessionId: string; keys: string[] }     // herdr 키 이름: "enter", "esc", "ctrl+c", "up", "1"
-  | { type: "watch_terminal"; sessionId: string; cols: number; rows: number }
+  | { type: "raw_text"; sessionId: string; text: string }     // 터미널 탭 입력란 전용. pane.send_text. Enter는 붙이지 않는다.
+  | { type: "watch_terminal"; sessionId: string }             // 크기는 서버가 pane rect에서 정한다
   | { type: "unwatch_terminal"; sessionId: string };
 ```
+
+herdr 키 이름 문법(CLI 레퍼런스 기준): 인쇄 가능한 글자 하나(`a`), 특수 키(`enter`, `tab`, `esc`, `backspace`, `left`, `right`, `up`, `down`), 조합(`ctrl+c`, `alt+x`, `shift+tab`), 기능 키(`f1`), 이름 붙은 문장 부호(`minus`, `plus`, `backtick`). 숫자 키 `1`이 글자 하나로 통과하는지는 빌더가 시험 세션에서 확인한다.
 
 ## 7. 구성 요소
 
@@ -218,8 +222,8 @@ server/  (Node 24, 127.0.0.1:PORT)
    ├─ herdr       : 소켓 클라이언트. 세션별 소켓, 요청 id 매칭, 재연결.
    ├─ sessions    : 1.5초 폴링 → Session[] 계산 → 변경분만 WebSocket으로 push.
    ├─ transcript  : 세션 id로 jsonl 찾기, 끝에서부터 읽기, fs.watch 증분 파싱 → ChatEvent[].
-   ├─ terminal    : `herdr terminal session observe` 자식 프로세스 1개/구독, 프레임 pass-through. 구독자가 없으면 종료.
-   └─ commands    : prompt → agent.prompt, keys → agent.send_keys. 결과와 오류를 그대로 폰에 돌려준다.
+   ├─ terminal    : `herdr terminal session observe <terminal_id> --cols <rect.width> --rows <rect.height>` 자식 프로세스 1개/구독, 프레임 pass-through. 구독자가 없으면 종료. `terminal.closed` 레코드가 오면 폰에 알리고 재시작한다.
+   └─ commands    : prompt → agent.prompt, keys → agent.send_keys, raw_text → pane.send_text. 결과와 오류를 그대로 폰에 돌려준다.
    ▼
 herdr server (default, rocket)  ──►  claude --resume … (×N)
 ```
@@ -246,10 +250,10 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 
 네 화면이다. 목업: https://claude.ai/artifact/Ear2krffWbpSF4VvE3RWEy
 
-0. **로그인.** 앱 이름, 접속한 Tailscale 계정 표시(1차 관문을 통과했다는 뜻), 암호 입력란, "로그인" 버튼. 틀리면 입력란 아래에 "암호가 다릅니다"를 보여 주고 입력을 비우지 않는다. 로그인에 성공하면 세션 목록으로 간다. 쿠키가 살아 있으면 이 화면을 건너뛴다. 세션 목록 화면 상단 메뉴에 로그아웃을 둔다.
+0. **로그인.** 앱 이름, 접속한 Tailscale 계정 표시(1차 관문을 통과했다는 뜻), 암호 입력란, "로그인" 버튼. 틀리면 입력란 아래에 "암호가 다릅니다"를 보여 주고 입력을 비우지 않는다. 로그인에 성공하면 세션 목록으로 간다. 쿠키가 살아 있으면 이 화면을 건너뛴다. 세션 목록 화면 상단 메뉴에 로그아웃을 둔다. iOS에서 홈 화면에 추가한 앱은 Safari와 쿠키 저장소가 분리되므로, 홈 화면 앱에서 처음 열 때 한 번 더 로그인하게 된다. 이것은 정상 동작이고 문서에 적어 둔다.
 1. **세션 목록.** herdr 세션별로 묶는다. 한 줄에 워크스페이스 라벨, 상태 표시, 제목, 짧은 경로(`~/.herdr/worktrees/rocket/remove-lab`). `blocked`는 맨 위, 테두리 강조. 상단에 "N 작업 중" 요약.
 2. **대화.** 헤더에 뒤로가기, 라벨, 상태 표시, 탭(대화 | 터미널). 본문은 사용자 말풍선(오른쪽), Claude 말풍선(왼쪽), 접힌 도구 묶음 칩. `blocked`면 하단에 승인 카드(원문 텍스트 + 선택지 버튼). 하단 입력창은 6.2 표를 따른다. 새 이벤트가 오면 맨 아래에 있을 때만 자동 스크롤한다.
-3. **터미널.** xterm.js 뷰. 폰 가로폭에 맞는 cols와 rows를 계산해 `watch_terminal`로 보낸다. 하단에 키 버튼 줄(Esc, Enter, Ctrl+C, ↑, ↓, Tab, 1, 2, 3). 가로 모드에서는 cols를 다시 계산해 다시 구독한다.
+3. **터미널.** xterm.js 뷰를 pane 크기(예: 155×54)로 만든다. 기본은 폰 폭에 맞춰 통째로 축소해서 보여 준다(글자는 작지만 전체 화면과 프롬프트가 보인다). 상단 토글 "원래 크기"를 켜면 1:1 크기에 가로 스크롤이 된다. 가로 모드에서는 축소 비율만 다시 계산한다. 하단에 키 버튼 줄(Esc, Enter, Ctrl+C, ↑, ↓, Tab, 1, 2, 3)과 글자 입력란이 있다. 입력란의 글은 `raw_text`로 보내고 Enter는 붙이지 않으므로, 보낸 뒤 Enter 버튼을 눌러 확정한다. 이 입력란은 승인 대화상자에서 글로 답해야 할 때(예: "No, and tell Claude what to do differently", AskUserQuestion의 직접 입력) 쓴다. 대화 화면의 승인 카드에는 "글로 답하려면 터미널 탭에서 입력하세요" 안내를 둔다.
 
 공통: 다크/라이트 모두 지원. 폰 safe area를 지킨다. 연결이 끊기면 상단에 띠로 알리고 자동 재접속한다.
 
@@ -274,6 +278,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 - 암호는 scrypt(N=2^15, r=8, p=1, 16바이트 salt)로 해시해서 저장한다. 비교는 상수 시간 비교를 쓴다. 토큰은 32바이트 무작위 값이고, 서버에는 sha256만 저장한다.
 - 쿠키는 `HttpOnly; Secure; SameSite=Strict; Path=/`이고 Max-Age는 30일이다. 개발용 HTTP 접속에서는 `Secure`를 뺀다.
 - 로그인 실패는 IP당 분당 5회까지만 받고, 넘으면 429와 함께 60초를 기다리게 한다.
+- `POST /api/login`과 WebSocket 업그레이드에서 `Origin` 헤더가 설정의 공개 주소(`https://macbookpro.tailfdccb7.ts.net`)와 같아야 한다. 폰 Safari에서 연 다른 웹 페이지가 같은 쿠키나 같은 Tailscale 신원으로 이 서버에 요청을 보내는 것을 막기 위해서다. 개발용 주소는 환경 변수로 하나 더 허용한다.
 - 폰에서 들어온 텍스트는 herdr에 그대로 넘긴다. 셸을 거치지 않는다(`agent.prompt`는 소켓 JSON이다).
 - transcript 파일은 읽기만 한다. `~/.claude/projects` 밖의 경로는 열지 않는다.
 - 로그에 메시지 본문을 남기지 않는다.
@@ -295,10 +300,21 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 2. Mac에서 한 세션에 프롬프트를 쳐서 `working`으로 바꾸면 폰 목록이 2초 안에 바뀐다.
 3. 폰에서 대기 중인 세션에 "현재 작업 디렉터리를 한 줄로 알려줘" 같은 메시지를 보내면, Mac의 Claude Code 화면에 그 메시지가 한 번 들어가고 응답이 폰 대화 화면에 나타난다.
 4. Claude가 승인을 기다리는 상태를 만들고(예: 허용되지 않은 Bash 명령), 폰에 승인 카드가 뜨고, 버튼을 누르면 Mac 화면에서 그 선택지가 선택된다.
-5. 터미널 탭이 Mac 화면과 같은 내용을 보여 주고, Mac 쪽 터미널 크기와 포커스는 바뀌지 않는다(`herdr pane layout`으로 전후 비교).
+5. 터미널 탭이 Mac 화면과 같은 내용(프롬프트 줄 포함)을 보여 주고, Mac 쪽 터미널 크기와 포커스는 바뀌지 않는다(`herdr pane layout`과 `herdr agent list`의 `focused`로 전후 비교). 터미널 탭 입력란에 글을 쓰고 Enter를 누르면 Mac 화면의 입력줄에 그 글이 한 번만 들어간다.
 6. 테일넷에 없는 기기(예: 셀룰러만 켠 폰, Tailscale 끔)에서는 접속되지 않는다. `Tailscale-User-Login` 헤더 없이 `curl http://127.0.0.1:<port>/api/sessions`를 치면 403이다.
 7. 서비스를 10분 켜 둔 뒤 `herdr status`와 cmux가 정상이고, `claude` 프로세스 수가 그대로다.
 
-## 13. 열린 질문
+### 12.1 시험 세션
 
-빌더 점검 후에 채운다.
+12.3과 12.4처럼 입력을 보내는 검증은 사용자의 실제 작업 세션에 하지 않는다. 빌더는 herdr `default` 세션에 시험용 워크스페이스를 하나 만들고(`herdr workspace create --name console-test`, 작업 디렉터리는 비어 있는 임시 폴더), 거기에 `herdr agent start console-test --kind claude`로 Claude Code를 띄운 뒤, 그 세션에만 시험 입력을 보낸다. 승인 대기 상태는 그 폴더 안에서 `touch probe.txt` 같은 무해한 명령을 요청해서 만든다. 검증이 끝나면 `herdr workspace close`로 지운다. 이 시험 세션은 사용자의 Claude 사용량을 조금 쓰고, 그동안 사용자의 herdr 사이드바에 보인다. 시험 세션에서 확인할 것: 숫자 키 하나로 선택지가 확정되는지, `agent.send_keys`가 `1` 같은 글자 하나를 받는지, 선택지 파싱 정규식에 넣을 실제 화면 텍스트.
+
+## 13. 빌더 점검 결과와 처리
+
+빌더 점검(별도 에이전트)이 낸 질문 4개와 처리다.
+
+| 질문 | 처리 |
+| --- | --- |
+| 암호 로그인을 1차 범위에 넣는가 | 넣는다. 사용자 결정(5.1). 2절, 5.2, 6.5, 7, 8.0, 10, 12에 반영했다. 추가로 Origin 검사를 10절에 넣었다. |
+| `observe --cols/--rows`가 실제로 무엇을 하는가 | 직접 확인했다. 화면을 자르기만 하고 PTY 크기는 바꾸지 않는다(4.2). 관찰자는 pane 실제 크기로 열고 폰에서 축소해 보여 준다(5.2, 8.3). |
+| 승인 대화상자에 글로 답하는 경우를 지원하는가 | 1차에서 터미널 탭의 입력란으로만 지원한다(`pane.send_text`, 5.2의 예외). 대화 화면 입력창은 `blocked`일 때 계속 비활성이다. 작성자 결정. |
+| 시험 입력을 어느 세션에 보내는가 | 사용자의 실제 세션에는 보내지 않는다. 시험용 워크스페이스를 만들어 쓰고 지운다(12.1). **시험 세션을 만드는 것은 사용자 확인이 필요하다.** |
