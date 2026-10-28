@@ -58,7 +58,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 - 프로토콜 22. `ping`이 버전과 capabilities를 돌려준다.
 - 쓰는 메서드와 파라미터는 9절 표에 있다. 전체 스키마는 `herdr api schema --json`으로 뽑는다(약 270KB).
 - `events.subscribe`는 구독마다 `pane_id`가 필수다. 전체 세션에 대한 구독은 없다.
-- `herdr terminal session observe <terminal_id> --cols N --rows N`은 읽기 전용 관찰자다. 입력, 크기 변경, 포커스를 가져가지 않는다. 출력은 줄 단위 JSON `{"type":"terminal.frame","seq","full","width","height","encoding":"base64","bytes"}`이고, bytes는 ANSI 이스케이프가 포함된 화면 바이트다. 첫 프레임은 전체 화면이고, 이후는 변경 시에만 온다. 3초 관찰 동안 작업 중인 에이전트는 프레임 1개를 보냈다.
+- `herdr terminal session observe <terminal_id> --cols N --rows N`은 읽기 전용 관찰자다. 입력, 크기 변경, 포커스를 가져가지 않는다. 출력은 줄 단위 JSON `{"type":"terminal.frame","seq","full","width","height","encoding":"ansi","bytes"}`이고, `bytes`는 ANSI 이스케이프가 포함된 화면 바이트를 base64로 적은 문자열이다(`encoding` 값은 `"ansi"`로 실측됨). 스트림이 끝나면 `{"type":"terminal.closed"}` 레코드가 온다. 첫 프레임은 전체 화면이고, 이후는 변경 시에만 온다. 3초 관찰 동안 작업 중인 에이전트는 프레임 1개를 보냈다.
 - **`--cols`/`--rows`는 PTY 크기를 바꾸지 않고 화면을 잘라서 보낸다(확인함).** pane이 155×54인 터미널을 `--cols 60 --rows 24`로 관찰하면 프레임 메타는 `width:60,height:24`이고, 내용은 왼쪽 위 60칸×24줄만 온다(줄은 60칸에서 잘리고, 51행에 있는 프롬프트는 보이지 않는다). `--cols 155 --rows 54`로 관찰하면 전체 화면이 그대로 온다. 관찰 전후로 모든 pane 크기는 155×54로 변하지 않았다. 따라서 **관찰자는 항상 pane의 실제 크기(`layouts[].panes[].rect`)로 연다.**
 
 ### 4.3 에이전트 레코드
@@ -81,7 +81,9 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 ### 4.4 Claude Code transcript
 
 - 경로: `~/.claude/projects/<프로젝트 슬러그>/<세션 id>.jsonl`. 슬러그는 작업 디렉터리 경로의 `/`와 `.`을 `-`로 바꾼 값이다. 사용자가 세션 중에 디렉터리를 옮길 수 있으므로, 슬러그를 계산하지 말고 `~/.claude/projects/*/<세션 id>.jsonl`을 찾는다. 실행 중인 5개 세션 모두 파일이 있었다.
-- 줄 단위 JSON. 레코드 `type`이 매우 다양하다(`user`, `assistant`, `attachment`, `system`, `api-request-blob`, `ai-title`, `permission-mode`, `file-history-snapshot` 등 19종). 대화 화면은 `user`와 `assistant`만 쓴다. `isSidechain: true`는 서브에이전트 기록이므로 뺀다.
+- 줄 단위 JSON. 레코드 `type`이 매우 다양하다(`user`, `assistant`, `attachment`, `system`, `api-request-blob`, `ai-title`, `permission-mode`, `file-history-snapshot` 등 19종). 대화 화면은 `user`와 `assistant`만 쓴다. `isSidechain: true`는 서브에이전트 기록이므로 뺀다. `isMeta: true`인 user 레코드는 스킬 본문 주입 같은 자동 삽입이므로 뺀다(실측 88개). `<command-name>…</command-name>`으로 시작하는 user 문자열은 슬래시 명령이므로 `/명령` 형태로 짧게 보여 주고, `<local-command-`, `<task-notification>`, `<system-reminder>`로 시작하는 문자열은 뺀다. 긴 붙여넣기는 `<pasted_content id="…">…</pasted_content>`로 감싸여 기록된다.
+- 한 assistant 메시지는 블록마다 별도 레코드로 기록될 수 있다(`message.id`는 같고 `uuid`는 다르다). 작업 중에 받은 메시지는 `queue-operation` 레코드로 먼저 기록되고, 꺼낼 때 `user` 레코드가 쓰인다.
+- 설계서 전체 줄 가운데 user/assistant 줄은 약 18%이고, `"type":"user"` 또는 `"type":"assistant"` 문자열 포함 여부로 JSON 파싱 전에 거를 수 있다(실측: 10,691줄 중 1,918줄, 누락 없음).
 - `user` 레코드의 `message.content`는 사용자가 친 글이면 문자열이고, 도구 결과면 `[{type:"tool_result",...}]` 배열이다. `assistant` 레코드의 `message.content`는 `thinking | text | tool_use` 블록 배열이다.
 - 공통 필드: `uuid`, `parentUuid`, `timestamp`, `sessionId`, `cwd`, `gitBranch`.
 - `ai-title` 레코드의 `aiTitle`이 세션 제목이다. herdr의 `terminal_title_stripped`와 같은 값이다.
@@ -127,7 +129,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 | 터미널 탭 | `herdr terminal session observe`를 **pane의 실제 크기**로 열고, 프레임을 WebSocket으로 그대로 전달한다. 폰에서 xterm.js를 같은 크기(예: 155×54)로 만들고, 기본은 폰 폭에 맞춰 축소(CSS transform scale)해서 전체를 보여 주며, 토글로 원래 크기 + 가로 스크롤로 바꾼다. | 관찰자는 요청한 크기로 화면을 자르기만 하므로(4.2절), 폰 크기로 열면 프롬프트 줄이 잘려 나간다. 읽기 전용 관찰자라 Mac 화면에 영향이 없다. 키는 `agent.send_keys`, 글자는 입력란에서 `pane.send_text`로 보낸다. |
 | 인증 1차 관문 | 서버는 127.0.0.1에만 바인드한다. 모든 요청에서 `Tailscale-User-Login` 헤더가 설정 파일의 소유자 로그인(`kkt629@gmail.com`)과 같은지 검사한다. 아니면 403. | Serve를 거치지 않은 요청은 헤더가 없어서 거부된다. 로컬에서 직접 붙는 요청도 헤더가 없으므로 개발 시에는 환경 변수로 이 관문만 끈다. |
 | 인증 2차 관문 (로그인) | 암호(passphrase) 하나를 서버 설정에 scrypt 해시로 저장한다. 로그인 화면에서 암호를 맞히면 서버가 무작위 세션 토큰을 만들어 `HttpOnly; Secure; SameSite=Strict` 쿠키로 준다. 유효 기간은 30일이고, 서버가 토큰 목록을 파일에 저장해서 재시작해도 유지된다. 로그아웃은 그 토큰을 지운다. 실패는 IP당 분당 5회로 제한한다. | 사용자 요구다. 폰을 잃어버리거나 테일넷에 다른 기기가 들어와도 암호 없이는 세션을 볼 수 없다. WebAuthn(Face ID)은 더 좋지만 구현량이 커서 후속으로 미룬다. |
-| 암호 설정 | `pnpm setup`이 터미널에서 암호를 두 번 받아(8자 이상, 12자 이상 권장) 해시를 설정 파일(`~/.config/session-console/config.json`, 권한 600)에 쓴다. 평문 암호는 어디에도 저장하지 않는다. 다시 실행해 암호를 바꾸면 모든 로그인 토큰이 무효가 된다. | 서버를 처음 켜기 전에 한 번만 하면 된다. 폰에서 암호를 바꾸는 화면은 만들지 않는다. |
+| 암호 설정 | `pnpm passphrase`가 터미널에서 암호를 두 번 받아(8자 이상, 12자 이상 권장) 해시를 설정 파일(`~/.config/session-console/config.json`, 권한 600)에 쓴다. 평문 암호는 어디에도 저장하지 않는다. 다시 실행해 암호를 바꾸면 모든 로그인 토큰이 무효가 된다. scrypt는 `maxmem` 64MiB로 호출한다(Node 24 기본값 32MiB에서는 N=2^15, r=8이 `ERR_CRYPTO_INVALID_SCRYPT_PARAMS`로 실패함, 실측). | 서버를 처음 켜기 전에 한 번만 하면 된다. 스크립트 이름을 `setup`으로 두지 않는 이유는 `pnpm setup`이 pnpm 11.5.2의 내장 명령이라 스크립트가 실행되지 않기 때문이다(실측). 폰에서 암호를 바꾸는 화면은 만들지 않는다. |
 | 토큰 폐기 | `pnpm revoke-all`이 저장된 토큰을 모두 지우고, 토큰마다 저장한 User-Agent와 로그인 시각을 출력한다. 서버는 로그인 성공과 실패를 시각, Tailscale 계정, 기기 종류와 함께 기록한다(암호는 기록하지 않는다). | 폰을 잃어버렸을 때 Mac에서 바로 끊는다. |
 | 백엔드 | Node 24 + TypeScript(빌드 없음), `node:http` + `ws` | 라우트가 몇 개 없다. 프레임워크를 들이지 않는다. |
 | 프런트엔드 | Vite + TypeScript + Preact, xterm.js | 작고 빠르다. PWA manifest와 최소 service worker(설치 가능하게만)를 넣는다. |
@@ -145,9 +147,10 @@ type HerdrSessionName = string;              // "default" | "rocket" | ...
 type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 
 interface Session {
-  id: string;                 // `${source}:${herdrSession}/${paneId}`  예: "herdr:default/w11:p1"
+  id: string;                 // `${source}:${group}/${paneId}`  예: "herdr:default/w11:p1"
   source: "herdr" | "cmux";   // 1차는 "herdr"만 만든다. 2차 cmux 어댑터용 자리.
-  herdrSession: HerdrSessionName;
+  group: string;              // 소스 안의 묶음 이름. herdr에서는 herdr 세션 이름("default", "rocket"). (처음 이름 herdrSession에서 바꿈)
+  reachable: boolean;         // 그 그룹의 소켓이 살아 있는가. false이면 status는 반드시 "unknown"이다(타입으로 강제).
   paneId: string;             // "w11:p1"
   terminalId: string;         // "term_65eb9535b347f6"
   workspaceLabel: string;     // "remove-lab"
@@ -210,11 +213,15 @@ interface AuthSession {
 ```ts
 type Command =
   | { type: "prompt"; sessionId: string; text: string }
-  | { type: "keys";   sessionId: string; keys: string[] }     // herdr 키 이름: "enter", "esc", "ctrl+c", "up", "1"
+  | { type: "keys";   sessionId: string; keys: string[]; guard?: { dialogId: string } }  // herdr 키 이름: "enter", "esc", "ctrl+c", "up", "1". guard가 있으면 서버가 보내기 직전에 승인 화면을 다시 읽어 dialogId가 다르면 stale_dialog로 거부한다.
   | { type: "raw_text"; sessionId: string; text: string }     // 터미널 탭 입력란 전용. pane.send_text. Enter는 붙이지 않는다.
   | { type: "watch_terminal"; sessionId: string }             // 크기는 서버가 pane rect에서 정한다
-  | { type: "unwatch_terminal"; sessionId: string };
+  | { type: "unwatch_terminal"; sessionId: string }
+  | { type: "watch_chat"; sessionId: string }                 // 이 세션의 transcript를 따라가 chat 메시지를 밀어 달라는 뜻. 서버가 어느 파일을 감시할지 알 유일한 방법이다.
+  | { type: "unwatch_chat"; sessionId: string };
 ```
+
+모든 명령에는 폰이 만든 `requestId`가 붙는다. 서버는 같은 `requestId`를 2분 동안 기억해서, 재전송된 명령에는 저장된 결과를 돌려주고 herdr에는 다시 보내지 않는다. 메시지가 두 번 들어가는 실패 조건을 구조로 막기 위해서다.
 
 herdr 키 이름 문법(CLI 레퍼런스 기준): 인쇄 가능한 글자 하나(`a`), 특수 키(`enter`, `tab`, `esc`, `backspace`, `left`, `right`, `up`, `down`), 조합(`ctrl+c`, `alt+x`, `shift+tab`), 기능 키(`f1`), 이름 붙은 문장 부호(`minus`, `plus`, `backtick`). 숫자 키 `1`이 글자 하나로 통과하는지는 빌더가 시험 세션에서 확인한다.
 
@@ -240,11 +247,17 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 
 - `POST /api/login` `{passphrase}` → 200이면 쿠키 설정, 401이면 `{error:"wrong_passphrase"}`, 429면 잠시 후 다시. 2차 관문 없이 열린 유일한 API다.
 - `POST /api/logout` → 쿠키의 토큰을 지운다.
-- `GET /api/me` → `{loggedIn: boolean, tailscaleLogin: string}`. 앱이 켜질 때 로그인 화면을 보일지 정한다.
-- `GET /api/sessions` → `Session[]`. 목록 화면용.
+- `GET /api/me` → `{loggedIn: boolean, tailscaleLogin: string, deviceName: string | null}`. 앱이 켜질 때 로그인 화면을 보일지 정한다. `deviceName`은 서버가 `tailscale whois`로 알아낸 기기 이름이고 못 알아내면 null이다.
+- `GET /api/logins` → 최근 로그인 시도 20건 `{ts, ok, tailscaleLogin, device}[]`. 8.0절 메뉴 "로그인 기록"용.
+- `GET /api/sessions` → `Session[]`. 12절의 curl 검증과 첫 화면용. 폰은 보통 WebSocket의 `sessions` 메시지로 받는다.
 - `GET /api/sessions/:id/chat?before=<uuid>&limit=50` → `ChatEvent[]`. 위로 스크롤하면 더 읽는다.
 - `GET /api/sessions/:id/blocked` → `{ text: string; options: {key: string; label: string}[] }`. `detection` 소스 텍스트와 파싱된 선택지.
-- `WS /ws` → 서버가 `{type:"sessions", sessions}`, `{type:"chat", sessionId, events}`, `{type:"frame", sessionId, frame}`, `{type:"command_result", requestId, ok, error?}`를 보낸다. 폰은 `Command`에 `requestId`를 붙여 보낸다.
+- `WS /ws` → 서버가 다음 메시지를 보낸다. 폰은 `Command`에 `requestId`를 붙여 보낸다.
+  - `{type:"sessions", groups:[{source, name, reachable}], sessions}`: 항상 전체 목록이고 바뀌었을 때만 보낸다. 폰은 목록을 통째로 바꾼다(유실된 메시지가 다음 메시지로 저절로 복구된다). `groups`는 pane이 하나도 없는 herdr 세션(예: `rocket`)도 빈 그룹으로 보여 주기 위한 것이다.
+  - `{type:"chat", sessionId, events}`: `watch_chat`한 세션의 transcript에 추가된 이벤트.
+  - `{type:"frame", sessionId, frame}`: 터미널 프레임.
+  - `{type:"terminal_status", sessionId, state: "live" | "restarting" | "ended"}`: 관찰자 스트림이 끊겨 다시 여는 중인지 알린다. 프레임은 화면이 바뀔 때만 오므로 이 메시지가 없으면 폰이 끊김을 알 수 없다.
+  - `{type:"command_result", requestId, ok, error?}`: 명령 결과. `error`는 10.1절 오류 코드다.
 - 폰이 WebSocket으로 붙어 있는 동안만 herdr를 폴링한다. 아무도 없으면 폴링과 관찰자를 모두 멈춘다.
 
 ### 7.2 herdr 클라이언트 규칙
@@ -257,6 +270,8 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 ## 8. 화면
 
 네 화면이다. 목업: https://claude.ai/artifact/Ear2krffWbpSF4VvE3RWEy
+
+경로는 `/login`, `/`, `/s/:source/:group/:paneId` 셋이다. 세션 경로에 `source`가 들어가므로 cmux 세션을 붙일 때 라우터를 고치지 않아도 된다.
 
 0. **로그인.** 상세 목업: https://claude.ai/artifact/KPKEGWywRsWRFhRYRB3dYN
    - 요소: 앱 표시, 호스트 이름, "Tailscale 확인됨 · <로그인 계정>" 줄(1차 관문 통과 표시. 서버가 `tailscale whois`로 기기 이름을 알아내면 덧붙인다), 암호 입력란("보기" 토글 포함), "이 기기에서 30일 동안 로그인이 유지됩니다" 안내, 로그인 버튼. 아이디란은 화면에 없다.
@@ -282,7 +297,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 | 세션 상세 | `agent.get` | `{target}` | target은 pane_id 또는 에이전트 이름 |
 | 승인 화면 텍스트 | `agent.read` | `{target, source:"detection", format:"text", strip_ansi:true}` | source enum은 API에서 `recent_unwrapped`(밑줄), CLI에서 `recent-unwrapped`(하이픈) |
 | 메시지 보내기 | `agent.prompt` | `{target, text}` | `blocked`면 `agent_blocked` 오류 |
-| 키 보내기 | `agent.send_keys` | `{target, keys:[...]}` | 키 이름 예: `enter`, `esc`, `ctrl+c`, `up`, `down`, `tab`, `1` |
+| 키 보내기 | `agent.send_keys` (에이전트가 없는 pane에는 `pane.send_keys`) | `{target, keys:[...]}` / `{pane_id, keys}` | 키 이름 예: `enter`, `esc`, `ctrl+c`, `up`, `down`, `tab`, `1` |
 | 터미널 화면 | `herdr terminal session observe <terminal_id> --cols N --rows N` | | 자식 프로세스. stdout이 줄 단위 JSON 프레임 |
 | 살아있는지 | `ping` | `{}` | 재연결 판정 |
 
@@ -293,9 +308,15 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 - 2차 관문: `/api/login`, 로그인 화면의 정적 파일, manifest를 뺀 모든 요청과 WebSocket 업그레이드에 유효한 로그인 쿠키가 있어야 한다. 없으면 401이고, 앱은 로그인 화면으로 돌아간다.
 - 암호는 scrypt(N=2^15, r=8, p=1, 16바이트 salt)로 해시해서 저장한다. 비교는 상수 시간 비교를 쓴다. 토큰은 32바이트 무작위 값이고, 서버에는 sha256만 저장한다.
 - 쿠키는 `HttpOnly; Secure; SameSite=Strict; Path=/`이고 Max-Age는 30일이다. 개발용 HTTP 접속에서는 `Secure`를 뺀다.
-- 로그인 실패는 IP당 분당 5회까지만 받고, 넘으면 429와 함께 60초를 기다리게 한다.
+- 로그인 실패는 IP당 분당 5회까지만 받고, 넘으면 429와 함께 60초를 기다리게 한다. IP는 `X-Forwarded-For`의 첫 값이고, 이 헤더는 같은 Mac의 다른 프로세스가 위조할 수 있으므로 전체 상한(분당 20회)을 함께 둔다.
 - `POST /api/login`과 WebSocket 업그레이드에서 `Origin` 헤더가 설정의 공개 주소(`https://macbookpro.tailfdccb7.ts.net`)와 같아야 한다. 폰 Safari에서 연 다른 웹 페이지가 같은 쿠키나 같은 Tailscale 신원으로 이 서버에 요청을 보내는 것을 막기 위해서다. 개발용 주소는 환경 변수로 하나 더 허용한다.
-- 폰에서 들어온 텍스트는 herdr에 그대로 넘긴다. 셸을 거치지 않는다(`agent.prompt`는 소켓 JSON이다).
+- 폰에서 들어온 텍스트는 herdr에 그대로 넘긴다. 셸을 거치지 않는다(`agent.prompt`는 소켓 JSON이다). Claude 세션 id는 UUID 형식을 통과한 값만 브랜드 타입으로 만들어 파일 이름에 쓴다.
+
+### 10.1 오류 코드
+
+서버 안에서 모듈 경계를 넘는 오류는 아래 코드 하나뿐이다. herdr 오류 코드는 어댑터 안에서 이 코드로 바뀌고, 모르는 코드는 `source_error`가 된다. 폰 문구와 HTTP 상태는 코드별 표 하나에서 나온다.
+
+`agent_blocked`(409, 재시도 금지), `agent_not_ready`(409), `delivery_unconfirmed`(504, 재시도 금지. 보낸 뒤 소켓이 끊겨 결과를 모름), `pane_closed`(410), `source_unreachable`(503, 자동 복구), `source_error`(502), `stale_dialog`(409, 다시 읽기), `stale_cursor`(410, 최신 페이지 다시 받기), `no_transcript`(404), `invalid_command`(400), `unauthorized`(401), `forbidden`(403), `wrong_passphrase`(401), `rate_limited`(429), `internal`(500).
 - transcript 파일은 읽기만 한다. `~/.claude/projects` 밖의 경로는 열지 않는다.
 - 로그에 메시지 본문을 남기지 않는다.
 
@@ -311,7 +332,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 
 ## 12. 검증 기준 (완료 선언 전에 실제로 확인한다)
 
-1. Mac에서 `pnpm setup`으로 암호를 정하고 `pnpm start`를 켠 뒤 `tailscale serve --bg <port>`를 등록한다. 아이폰 Safari로 `https://macbookpro.tailfdccb7.ts.net`에 들어가면 로그인 화면이 먼저 보인다. 틀린 암호는 거부되고, 맞는 암호를 넣으면 목록에 현재 herdr 에이전트들이 실제 라벨과 상태로 보인다. Safari를 완전히 닫았다가 다시 열어도 로그인 화면 없이 목록이 보인다.
+1. Mac에서 `pnpm passphrase`로 암호를 정하고 `pnpm start`를 켠 뒤 `tailscale serve --bg <port>`를 등록한다. 아이폰 Safari로 `https://macbookpro.tailfdccb7.ts.net`에 들어가면 로그인 화면이 먼저 보인다. 틀린 암호는 거부되고, 맞는 암호를 넣으면 목록에 현재 herdr 에이전트들이 실제 라벨과 상태로 보인다. Safari를 완전히 닫았다가 다시 열어도 로그인 화면 없이 목록이 보인다.
 1-1. 로그인 쿠키 없이 `curl -H 'Tailscale-User-Login: kkt629@gmail.com' http://127.0.0.1:<port>/api/sessions`를 치면 401이다. 틀린 암호로 `/api/login`을 6번 연속 치면 여섯 번째는 429다.
 2. Mac에서 한 세션에 프롬프트를 쳐서 `working`으로 바꾸면 폰 목록이 2초 안에 바뀐다.
 3. 폰에서 대기 중인 세션에 "현재 작업 디렉터리를 한 줄로 알려줘" 같은 메시지를 보내면, Mac의 Claude Code 화면에 그 메시지가 한 번 들어가고 응답이 폰 대화 화면에 나타난다.
