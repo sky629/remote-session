@@ -26,21 +26,65 @@ export function createSessionRegistry(deps: {
   transcripts: Pick<Transcripts, "locate">;
   intervalMs: number;
 }): SessionRegistry {
-  // TODO state: list: SessionList; byId: Map<SessionId, Session>; polledAt = 0; active = false; generation = 0; inflight; timer
-  //
-  // pollOnce(), single flight (a second caller awaits the same promise):
-  //   polls = await Promise.all(sources.map(s => s.poll()))
-  //   rows = polls.flatMap(p => p.sessions); groups = polls.flatMap(p => p.groups)
-  //   sessions = await Promise.all(rows.map(async r => ({ ...r, transcriptPath: r.claudeSessionId ? await locate(r.claudeSessionId) : null })))
-  //   diff = diffSessions(byId, sessions); groupsMoved = JSON.stringify(groups) !== JSON.stringify(list.groups)
-  //   list = { groups, sessions }; byId = new Map(sessions.map(s => [s.id, s])); polledAt = now
-  //   if (diff has any entry || groupsMoved) listeners.forEach(l => l(list, diff))
-  //
-  // setActive(true) from inactive: active = true; gen = ++generation; loop(gen)
-  // loop(gen): await pollOnce(); if (active && gen === generation) timer = setTimeout(() => loop(gen), intervalMs)
-  // setActive(false): active = false; clearTimeout(timer)
+  let list: SessionList = { groups: [], sessions: [] };
+  let byId = new Map<SessionId, Session>();
+  let polledAt = 0;
+  let active = false;
+  let generation = 0;
+  let inflight: Promise<void> | null = null;
+  let timer: NodeJS.Timeout | undefined;
+  const listeners = new Set<(list: SessionList, diff: SessionsDiff) => void>();
+
+  /** Single flight: a second caller awaits the same promise. */
+  function pollOnce(): Promise<void> {
+    inflight ??= (async () => {
+      const polls = await Promise.all(deps.sources.map((s) => s.poll()));
+      const groups = polls.flatMap((p) => p.groups);
+      const sessions = await Promise.all(
+        polls
+          .flatMap((p) => p.sessions)
+          .map(async (r): Promise<Session> => ({ ...r, transcriptPath: r.claudeSessionId ? await deps.transcripts.locate(r.claudeSessionId) : null })),
+      );
+      const diff = diffSessions(byId, sessions);
+      const groupsMoved = JSON.stringify(groups) !== JSON.stringify(list.groups);
+      list = { groups, sessions };
+      byId = new Map(sessions.map((s) => [s.id, s]));
+      polledAt = Date.now();
+      if (diff.added.length || diff.removed.length || diff.changed.length || groupsMoved) for (const l of listeners) l(list, diff);
+    })().finally(() => {
+      inflight = null;
+    });
+    return inflight;
+  }
+
   // Off then on during a poll: the old chain sees a stale generation and stops; only the new chain reschedules.
-  throw new Error("not implemented");
+  async function loop(gen: number): Promise<void> {
+    try {
+      await pollOnce();
+    } catch (e) {
+      console.error(`session poll failed: ${(e as Error).message}`);
+    }
+    if (active && gen === generation) timer = setTimeout(() => void loop(gen), deps.intervalMs);
+  }
+
+  return {
+    setActive(on) {
+      if (on === active) return;
+      active = on;
+      clearTimeout(timer);
+      if (on) void loop(++generation);
+    },
+    current: () => list,
+    get: (id) => byId.get(id),
+    async list() {
+      if (Date.now() - polledAt >= deps.intervalMs) await pollOnce();
+      return list;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+  };
 }
 
 /** Pure. Rows compare field by field over Object.keys, so a new Session field needs no edit here. */
