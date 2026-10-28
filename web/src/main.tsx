@@ -1,4 +1,5 @@
 import { render } from "preact";
+import "./styles.css";
 import { App } from "./app.tsx";
 import { boot } from "./store.ts";
 
