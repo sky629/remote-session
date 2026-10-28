@@ -52,7 +52,7 @@ export function TerminalView(props: { session: Session; scale: "fit" | "native";
   return (
     <div class="term-view">
       <div class="term-tools">
-        <span class="term-tools__status">{notice ?? (hasFrame ? `${size.width}×${size.height}` : "")}</span>
+        <span class={`term-tools__status${notice ? " term-tools__status--notice" : ""}`}>{notice ?? (hasFrame ? `${size.width}×${size.height}` : "")}</span>
         <button class="toggle" type="button" aria-pressed={scale === "native"} onClick={() => dispatch({ type: "term_scale", scale: scale === "fit" ? "native" : "fit" })}>
           원래 크기
         </button>

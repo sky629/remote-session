@@ -704,7 +704,7 @@ a {
 /* approval card */
 .approval {
   flex: none;
-  max-height: 45%;
+  max-height: 60%;
   overflow-y: auto;
   margin: 0 max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
   padding: 10px 12px;
@@ -715,11 +715,15 @@ a {
   border-radius: var(--r-card);
   background: var(--card);
 }
+.approval > * {
+  flex: none;
+}
 .approval__head {
   color: var(--blocked);
   font-weight: 600;
 }
 .approval__text {
+  max-height: 120px;
   margin: 0;
   padding: 8px 10px;
   overflow-x: auto;
@@ -833,8 +837,11 @@ a {
 .term-tools__status {
   flex: 1;
   min-width: 0;
-  color: var(--blocked);
+  color: var(--muted);
   font-size: 13px;
+}
+.term-tools__status--notice {
+  color: var(--blocked);
 }
 .toggle {
   display: inline-flex;
@@ -887,6 +894,7 @@ a {
   text-align: center;
 }
 .keybar {
+  scrollbar-width: none;
   flex: none;
   display: flex;
   gap: 6px;

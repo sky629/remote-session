@@ -343,6 +343,7 @@ export function Composer(props: { session: Session; draft: string; sending: bool
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight + 2, COMPOSER_MAX_PX)}px`;
+    el.style.overflowY = el.scrollHeight + 2 > COMPOSER_MAX_PX ? "auto" : "hidden";
   }, [draft]);
 
   const send = () => {
