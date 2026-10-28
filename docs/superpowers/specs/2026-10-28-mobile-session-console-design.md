@@ -216,10 +216,10 @@ type Command =
   | { type: "keys";   sessionId: string; keys: string[]; guard?: { dialogId: string } }  // herdr 키 이름: "enter", "esc", "ctrl+c", "up", "1". guard가 있으면 서버가 보내기 직전에 승인 화면을 다시 읽어 dialogId가 다르면 stale_dialog로 거부한다.
   | { type: "raw_text"; sessionId: string; text: string }     // 터미널 탭 입력란 전용. pane.send_text. Enter는 붙이지 않는다.
   | { type: "watch_terminal"; sessionId: string }             // 크기는 서버가 pane rect에서 정한다
-  | { type: "unwatch_terminal"; sessionId: string }
-  | { type: "watch_chat"; sessionId: string }                 // 이 세션의 transcript를 따라가 chat 메시지를 밀어 달라는 뜻. 서버가 어느 파일을 감시할지 알 유일한 방법이다.
-  | { type: "unwatch_chat"; sessionId: string };
+  | { type: "unwatch_terminal"; sessionId: string };
 ```
+
+대화 구독 명령은 없다. 폰이 하나라도 붙어 있는 동안 서버는 목록에 있는 모든 Claude 세션의 transcript를 따라가고, 추가된 이벤트를 모든 클라이언트에 밀어 준다. 폰은 세션별 스레드에 쌓아 두고(세션당 최근 500개까지), 화면을 열 때 최신 페이지 한 번을 GET으로 받아 uuid 기준 합집합으로 합친다. 그래서 폰이 "구독 뒤 조회" 같은 순서 규칙을 알 필요가 없고, 서버의 따라가기 대상은 클라이언트 수와 세션 목록에서 저절로 정해진다.
 
 모든 명령에는 폰이 만든 `requestId`가 붙는다. 서버는 같은 `requestId`를 2분 동안 기억해서, 재전송된 명령에는 저장된 결과를 돌려주고 herdr에는 다시 보내지 않는다. 메시지가 두 번 들어가는 실패 조건을 구조로 막기 위해서다.
 
@@ -235,9 +235,9 @@ server/  (Node 24, 127.0.0.1:PORT)
    ├─ auth        : 1차 Tailscale 헤더 검사(실패 403) → 2차 로그인 쿠키 검사(실패 401, 로그인 화면으로).
    │                `/api/login`, 정적 파일, manifest만 2차 관문 없이 통과한다.
    ├─ herdr       : 소켓 클라이언트. 세션별 소켓, 요청 id 매칭, 재연결.
-   ├─ sessions    : 1.5초 폴링 → Session[] 계산 → 변경분만 WebSocket으로 push.
-   ├─ transcript  : 세션 id로 jsonl 찾기, 끝에서부터 읽기, fs.watch 증분 파싱 → ChatEvent[].
-   ├─ terminal    : `herdr terminal session observe <terminal_id> --cols <rect.width> --rows <rect.height>` 자식 프로세스 1개/구독, 프레임 pass-through. 구독자가 없으면 종료. `terminal.closed` 레코드가 오면 폰에 알리고 재시작한다.
+   ├─ sessions    : 1.5초 폴링 → Session[] 계산 → 바뀌었을 때 전체 목록을 WebSocket으로 push. 폴링은 클라이언트가 하나라도 있을 때만 돈다.
+   ├─ transcript  : 세션 id로 jsonl 찾기, 끝에서부터 읽기, fs.watch 증분 파싱 → ChatEvent[]. 따라가는 파일 집합은 "클라이언트가 있는가 × 목록의 Claude 세션"에서 매번 다시 계산한다(선언적, 참조 계수 없음).
+   ├─ terminal    : `herdr --session <group> terminal session observe <terminal_id> --cols <rect.width> --rows <rect.height>` 자식 프로세스를 클라이언트와 세션 쌍마다 하나씩 둔다. 프레임 pass-through. 클라이언트가 끊기면 그 클라이언트의 관찰자만 닫는다. 폴링마다 pane rect를 비교해 바뀌었으면 새 크기로 다시 연다. `terminal.closed`나 종료가 오면 `terminal_status`로 알리고 재시작한다.
    └─ commands    : prompt → agent.prompt, keys → agent.send_keys, raw_text → pane.send_text. 결과와 오류를 그대로 폰에 돌려준다.
    ▼
 herdr server (default, rocket)  ──►  claude --resume … (×N)
@@ -254,7 +254,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 - `GET /api/sessions/:id/blocked` → `{ text: string; options: {key: string; label: string}[] }`. `detection` 소스 텍스트와 파싱된 선택지.
 - `WS /ws` → 서버가 다음 메시지를 보낸다. 폰은 `Command`에 `requestId`를 붙여 보낸다.
   - `{type:"sessions", groups:[{source, name, reachable}], sessions}`: 항상 전체 목록이고 바뀌었을 때만 보낸다. 폰은 목록을 통째로 바꾼다(유실된 메시지가 다음 메시지로 저절로 복구된다). `groups`는 pane이 하나도 없는 herdr 세션(예: `rocket`)도 빈 그룹으로 보여 주기 위한 것이다.
-  - `{type:"chat", sessionId, events}`: `watch_chat`한 세션의 transcript에 추가된 이벤트.
+  - `{type:"chat", sessionId, events}`: 목록에 있는 Claude 세션의 transcript에 추가된 이벤트. 모든 클라이언트에 간다.
   - `{type:"frame", sessionId, frame}`: 터미널 프레임.
   - `{type:"terminal_status", sessionId, state: "live" | "restarting" | "ended"}`: 관찰자 스트림이 끊겨 다시 여는 중인지 알린다. 프레임은 화면이 바뀔 때만 오므로 이 메시지가 없으면 폰이 끊김을 알 수 없다.
   - `{type:"command_result", requestId, ok, error?}`: 명령 결과. `error`는 10.1절 오류 코드다.
