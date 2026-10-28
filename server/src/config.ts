@@ -1,12 +1,15 @@
+import { readFileSync, statSync } from "node:fs";
+import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 
-const DIR = join(homedir(), ".config", "session-console");
+const DIR = process.env.SESSION_CONSOLE_DIR || join(homedir(), ".config", "session-console");
 
 /**
  * Every file under DIR has exactly one writer process; every other process only reads it. So the CLI and the
  * server never race on one file, and revocation is a timestamp marker per writer instead of an edit to tokens.json.
+ * SESSION_CONSOLE_DIR replaces DIR, read once at import, so tests and local runs never touch the owner's state.
  */
 export const PATHS = {
   dir: DIR,
@@ -53,7 +56,27 @@ export interface FileCell<T> {
 }
 
 export function fileCell<S extends z.ZodType>(path: string, schema: S, empty: z.output<S>): FileCell<z.output<S>> {
-  throw new Error("not implemented");
+  // ino is part of the key: a rename by the writer swaps the inode even when size and mtime happen to match.
+  let cached: { key: string; value: z.output<S> } | null = null;
+  return {
+    read() {
+      const st = statSync(path, { bigint: true, throwIfNoEntry: false });
+      if (!st) return empty;
+      const key = `${st.ino}:${st.mtimeNs}:${st.size}`;
+      if (cached?.key !== key) cached = { key, value: schema.parse(JSON.parse(readFileSync(path, "utf8"))) };
+      return cached.value;
+    },
+    async write(value) {
+      const dir = dirname(path);
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      await chmod(dir, 0o700);
+      const tmp = `${path}.tmp-${process.pid}`;
+      // A temp file left by a crashed run keeps its old mode on rewrite, so it goes first.
+      await rm(tmp, { force: true });
+      await writeFile(tmp, JSON.stringify(value), { mode: 0o600 });
+      await rename(tmp, path);
+    },
+  };
 }
 
 /** null until `pnpm passphrase` has run; the server refuses to start then, with a message naming that command. */
