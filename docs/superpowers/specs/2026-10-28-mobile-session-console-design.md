@@ -130,7 +130,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 | 인증 1차 관문 | 서버는 127.0.0.1에만 바인드한다. 모든 요청에서 `Tailscale-User-Login` 헤더가 설정 파일의 소유자 로그인(`kkt629@gmail.com`)과 같은지 검사한다. 아니면 403. | Serve를 거치지 않은 요청은 헤더가 없어서 거부된다. 로컬에서 직접 붙는 요청도 헤더가 없으므로 개발 시에는 환경 변수로 이 관문만 끈다. |
 | 인증 2차 관문 (로그인) | 암호(passphrase) 하나를 서버 설정에 scrypt 해시로 저장한다. 로그인 화면에서 암호를 맞히면 서버가 무작위 세션 토큰을 만들어 `HttpOnly; Secure; SameSite=Strict` 쿠키로 준다. 유효 기간은 30일이고, 서버가 토큰 목록을 파일에 저장해서 재시작해도 유지된다. 로그아웃은 그 토큰을 지운다. 실패는 IP당 분당 5회로 제한한다. | 사용자 요구다. 폰을 잃어버리거나 테일넷에 다른 기기가 들어와도 암호 없이는 세션을 볼 수 없다. WebAuthn(Face ID)은 더 좋지만 구현량이 커서 후속으로 미룬다. |
 | 암호 설정 | `pnpm passphrase`가 터미널에서 암호를 두 번 받아(8자 이상, 12자 이상 권장) 해시를 설정 파일(`~/.config/session-console/config.json`, 권한 600)에 쓴다. 평문 암호는 어디에도 저장하지 않는다. 다시 실행해 암호를 바꾸면 모든 로그인 토큰이 무효가 된다. scrypt는 `maxmem` 64MiB로 호출한다(Node 24 기본값 32MiB에서는 N=2^15, r=8이 `ERR_CRYPTO_INVALID_SCRYPT_PARAMS`로 실패함, 실측). | 서버를 처음 켜기 전에 한 번만 하면 된다. 스크립트 이름을 `setup`으로 두지 않는 이유는 `pnpm setup`이 pnpm 11.5.2의 내장 명령이라 스크립트가 실행되지 않기 때문이다(실측). 폰에서 암호를 바꾸는 화면은 만들지 않는다. |
-| 토큰 폐기 | `pnpm revoke-all`이 저장된 토큰을 모두 지우고, 토큰마다 저장한 User-Agent와 로그인 시각을 출력한다. 서버는 로그인 성공과 실패를 시각, Tailscale 계정, 기기 종류와 함께 기록한다(암호는 기록하지 않는다). | 폰을 잃어버렸을 때 Mac에서 바로 끊는다. |
+| 토큰 폐기 | `pnpm revoke-all`이 "이 시각 이전에 만든 토큰은 모두 무효"라는 표지 파일(`revoked-by-cli`)을 쓰고, 무효가 된 토큰마다 저장한 User-Agent와 로그인 시각을 출력한다. 토큰 파일 자체는 서버만 쓰며, 서버가 다음에 쓸 때 죽은 항목을 정리한다. 폰의 "모든 기기 로그아웃"은 서버가 `revoked-by-server` 표지를 쓴다. 서버와 CLI가 같은 파일을 쓰지 않으므로 폐기한 토큰이 되살아나는 경쟁이 없다. 서버는 로그인 성공과 실패를 시각, Tailscale 계정, 기기 종류와 함께 기록한다(암호는 기록하지 않는다). | 폰을 잃어버렸을 때 Mac에서 바로 끊는다. |
 | 백엔드 | Node 24 + TypeScript(빌드 없음), `node:http` + `ws` | 라우트가 몇 개 없다. 프레임워크를 들이지 않는다. |
 | 프런트엔드 | Vite + TypeScript + Preact, xterm.js | 작고 빠르다. PWA manifest와 최소 service worker(설치 가능하게만)를 넣는다. |
 | 실행 | `pnpm start`로 전경 실행. launchd 등록은 1차에서 뺀다. 필요하면 후속으로 한다. | 먼저 손으로 켜고 끄며 검증한다. |
@@ -245,7 +245,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 
 ### 7.1 서버 ↔ 폰 프로토콜
 
-- `POST /api/login` `{passphrase}` → 200이면 쿠키 설정, 401이면 `{error:"wrong_passphrase"}`, 429면 잠시 후 다시. 2차 관문 없이 열린 유일한 API다.
+- `POST /api/login` `{passphrase}` → 200이면 쿠키 설정, 401이면 `{error:"wrong_passphrase", remaining}`, 429면 `{error:"rate_limited", retry_after}`. `GET /api/me`와 함께 2차 관문 없이 열린 API 둘 중 하나다(`/api/me`는 로그인 여부를 돌려줘야 하므로 열려 있어야 한다). 모든 POST와 WebSocket 업그레이드는 Origin 검사를 받는다.
 - `POST /api/logout` → 쿠키의 토큰을 지운다.
 - `GET /api/me` → `{loggedIn: boolean, tailscaleLogin: string, deviceName: string | null}`. 앱이 켜질 때 로그인 화면을 보일지 정한다. `deviceName`은 서버가 `tailscale whois`로 알아낸 기기 이름이고 못 알아내면 null이다.
 - `GET /api/logins` → 최근 로그인 시도 20건 `{ts, ok, tailscaleLogin, device}[]`. 8.0절 메뉴 "로그인 기록"용.
@@ -283,7 +283,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
    - 403: Tailscale 관문에서 막힌 기기에는 로그인 화면 대신 "이 기기는 허용되지 않았습니다" 화면만 보여 준다. 암호를 시도할 기회를 주지 않는다.
    - 로그아웃: 목록 화면 메뉴에 "이 기기 로그아웃"과 "모든 기기 로그아웃"을 둔다. 메뉴의 "로그인 기록"은 최근 20건(시각, 성공 여부, 기기 종류)을 보여 준다.
 1. **세션 목록.** herdr 세션별로 묶는다. 한 줄에 워크스페이스 라벨, 상태 표시, 제목, 짧은 경로(`~/.herdr/worktrees/rocket/remove-lab`). `blocked`는 맨 위, 테두리 강조. 상단에 "N 작업 중" 요약.
-2. **대화.** 헤더에 뒤로가기, 라벨, 상태 표시, 탭(대화 | 터미널). 본문은 사용자 말풍선(오른쪽), Claude 말풍선(왼쪽), 접힌 도구 묶음 칩. `blocked`면 하단에 승인 카드(원문 텍스트 + 선택지 버튼). 하단 입력창은 6.2 표를 따른다. 새 이벤트가 오면 맨 아래에 있을 때만 자동 스크롤한다.
+2. **대화.** 헤더에 뒤로가기, 라벨, 상태 표시, 탭(대화 | 터미널). 본문은 사용자 말풍선(오른쪽), Claude 말풍선(왼쪽), 접힌 도구 묶음 칩. Claude 말풍선은 마크다운으로 렌더링하되 원문 HTML은 해석하지 않는다(`markdown-it`, `html: false`). 화면에 없는 세션의 스레드만 최근 500개로 자른다. 보고 있는 스레드는 자르지 않는다. `blocked`면 하단에 승인 카드(원문 텍스트 + 선택지 버튼). 하단 입력창은 6.2 표를 따른다. 새 이벤트가 오면 맨 아래에 있을 때만 자동 스크롤한다.
 3. **터미널.** xterm.js 뷰를 pane 크기(예: 155×54)로 만든다. 기본은 폰 폭에 맞춰 통째로 축소해서 보여 준다(글자는 작지만 전체 화면과 프롬프트가 보인다). 상단 토글 "원래 크기"를 켜면 1:1 크기에 가로 스크롤이 된다. 가로 모드에서는 축소 비율만 다시 계산한다. 하단에 키 버튼 줄(Esc, Enter, Ctrl+C, ↑, ↓, Tab, 1, 2, 3)과 글자 입력란이 있다. 입력란의 글은 `raw_text`로 보내고 Enter는 붙이지 않으므로, 보낸 뒤 Enter 버튼을 눌러 확정한다. 이 입력란은 승인 대화상자에서 글로 답해야 할 때(예: "No, and tell Claude what to do differently", AskUserQuestion의 직접 입력) 쓴다. 대화 화면의 승인 카드에는 "글로 답하려면 터미널 탭에서 입력하세요" 안내를 둔다.
 
 공통: 다크/라이트 모두 지원. 폰 safe area를 지킨다. 연결이 끊기면 상단에 띠로 알리고 자동 재접속한다.

@@ -1,0 +1,40 @@
+{
+  "name": "session-console",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "engines": { "node": ">=24.18.0" },
+  "scripts": {
+    "passphrase": "node server/src/cli/passphrase.ts",
+    "revoke-all": "node server/src/cli/revoke-all.ts",
+    "start": "vite build web && node server/src/main.ts",
+    "dev": "node scripts/dev.ts",
+    "test": "node --test \"server/src/**/*.test.ts\" \"shared/**/*.test.ts\"",
+    "check": "tsc -p tsconfig.json && tsc -p web/tsconfig.json && pnpm test"
+  },
+  "imports": {
+    "#shared/*": "./shared/*.ts",
+    "#config": "./server/src/config.ts",
+    "#auth": "./server/src/auth.ts",
+    "#source": "./server/src/source.ts",
+    "#herdr": "./server/src/herdr/index.ts",
+    "#claude": "./server/src/claude/index.ts",
+    "#sessions": "./server/src/sessions.ts",
+    "#hub": "./server/src/hub.ts",
+    "#http": "./server/src/http.ts"
+  },
+  "dependencies": {
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "@preact/signals": "2.11.3",
+    "@types/node": "24.19.2",
+    "@types/ws": "8.18.2",
+    "@xterm/xterm": "6.0.0",
+    "preact": "10.29.8",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}
