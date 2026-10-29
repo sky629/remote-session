@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import type { SessionId } from "#shared/domain";
 import type { Result } from "#shared/errors";
-import { CommandSchema } from "#shared/protocol";
+import { parseCommand } from "#shared/protocol";
 import type { Command, InputCommand, RequestId, ServerMessage } from "#shared/protocol";
 import type { Auth, TokenHash } from "#auth";
 import { dialogId } from "#claude";
@@ -230,20 +230,3 @@ export async function execute(
 }
 
 const isInput = (cmd: Command): cmd is InputCommand => cmd.type === "prompt" || cmd.type === "keys" || cmd.type === "raw_text";
-
-/**
- * Stands in for parseCommand from #shared/protocol, whose body is not implemented in shared/ yet. Same signature and
- * contract; replace this with the shared import once that body lands.
- */
-function parseCommand(raw: string): { ok: true; command: Command } | { ok: false; requestId: RequestId | null } {
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    return { ok: false, requestId: null };
-  }
-  const parsed = CommandSchema.safeParse(json);
-  if (parsed.success) return { ok: true, command: parsed.data };
-  const id = typeof json === "object" && json !== null ? (json as { requestId?: unknown }).requestId : undefined;
-  return { ok: false, requestId: typeof id === "string" && /^[\w-]{8,64}$/.test(id) ? (id as RequestId) : null };
-}

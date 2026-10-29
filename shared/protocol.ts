@@ -35,7 +35,17 @@ export type InputCommand = Extract<Command, { type: "prompt" | "keys" | "raw_tex
 
 /** JSON.parse and CommandSchema.safeParse. A failure keeps a readable requestId so the hub can answer invalid_command. */
 export function parseCommand(raw: string): { ok: true; command: Command } | { ok: false; requestId: RequestId | null } {
-  throw new Error("not implemented");
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return { ok: false, requestId: null };
+  }
+  const parsed = CommandSchema.safeParse(json);
+  if (parsed.success) return { ok: true, command: parsed.data };
+  const id = typeof json === "object" && json !== null ? (json as { requestId?: unknown }).requestId : undefined;
+  const requestId = RequestIdField.safeParse(id);
+  return { ok: false, requestId: requestId.success ? requestId.data : null };
 }
 
 export type TerminalState = "live" | "restarting" | "ended";
