@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { blockedDialog, dialogId, parseDialogOptions } from "./blocked.ts";
 
-// Synthetic dialogs in the shape Claude Code draws them. Replace with detection text captured from the
-// console-test session (spec 12.1) once it exists.
+// Synthetic dialogs in the shape Claude Code draws them, plus two fixtures captured from the console-test session
+// (spec 12.1) on 2026-10-29 with Claude Code 2.1.312: fixtures/question-dialog.txt is the tail of the detection
+// text of an AskUserQuestion dialog, and fixtures/prompt-screen.txt is an idle prompt screen with its blank middle
+// rows cut down.
+const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 const permission = (marker: 1 | 2 | 3) =>
   [
     "✻ Working on the probe file",
@@ -64,6 +68,17 @@ const cases: [name: string, text: string, expected: ReturnType<typeof parseDialo
       { key: "3", label: "Type something." },
     ],
   ],
+  [
+    "captured AskUserQuestion dialog: a rule between option 3 and 4 does not split the run",
+    fixture("question-dialog.txt"),
+    [
+      { key: "1", label: "Red You prefer red." },
+      { key: "2", label: "Blue You prefer blue." },
+      { key: "3", label: "Type something." },
+      { key: "4", label: "Chat about this" },
+    ],
+  ],
+  ["captured idle prompt screen: no options", fixture("prompt-screen.txt"), []],
   ["a numbered list in Claude's prose", ["Here is the plan:", "1. Refactor the parser", "2. Add tests", "3. Run the suite"].join("\n"), []],
   ["a gap in the numbering", ["❯ 1. Yes", "  2. Maybe", "  4. No"].join("\n"), []],
   ["numbering that does not start at 1", ["❯ 2. Yes", "  3. No"].join("\n"), []],

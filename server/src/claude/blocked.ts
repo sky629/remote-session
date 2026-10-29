@@ -5,7 +5,8 @@ import type { BlockedDialog, BlockedOption } from "#shared/domain";
  * Pulls Claude Code's numbered choices out of a dialog's plain text (spec 5.2).
  * Recognized: the last run of option lines shaped `[❯] N. label`, numbered exactly 1..n, n >= 2, with the ❯
  * selection marker on exactly one of them. A line indented deeper than the option's number continues that option's
- * label (a wrapped label, or a question option's description). Box borders (│ ┃) are ignored.
+ * label (a wrapped label, or a question option's description). Box borders (│ ┃) are ignored, and a horizontal rule
+ * (─ ━ ═ only) is neutral: AskUserQuestion draws one between its own options and "Chat about this" (measured).
  * Anything else gives [], and the phone shows the generic keys beside the raw text. A wrong [] costs one extra
  * tap; a wrong option answers the dialog wrongly, so any gap or repeat in the numbers rejects the run, and the
  * marker requirement keeps a numbered list in Claude's prose from ever becoming buttons.
@@ -15,6 +16,7 @@ export function parseDialogOptions(text: string): BlockedOption[] {
   let last: Option[] = [];
   for (const raw of text.split("\n")) {
     const line = raw.replace(/\r$/, "").replace(/^(\s*)[│┃]/, "$1 ").replace(/[│┃]\s*$/, "").trimEnd();
+    if (RULE.test(line)) continue;
     const m = OPTION.exec(line);
     const prev = run.at(-1);
     if (m) {
@@ -40,6 +42,7 @@ interface Option {
 }
 
 const OPTION = /^(\s*)(❯\s*)?(\d{1,2})[.)]\s+(\S.*)$/;
+const RULE = /^\s*[─━═]+\s*$/;
 const indent = (line: string): number => line.length - line.trimStart().length;
 
 /** First 12 hex chars of sha256 over the text with whitespace runs collapsed and trimmed. Same dialog, same id. */
