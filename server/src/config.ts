@@ -19,6 +19,7 @@ export const PATHS = {
   revokedByCli: join(DIR, "revoked-by-cli"), // writer: pnpm passphrase, pnpm revoke-all
   revokedByServer: join(DIR, "revoked-by-server"), // writer: server, for "모든 기기 로그아웃"
   logins: join(DIR, "logins.jsonl"), // writer: server, append-only
+  claudeDir: join(homedir(), ".claude"),
   claudeProjects: join(homedir(), ".claude", "projects"),
   webDist: new URL("../../web/dist/", import.meta.url).pathname,
   /** The Mac app's CLI (spec 4.5), else `tailscale` on PATH. */

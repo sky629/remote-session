@@ -14,7 +14,7 @@ import { ChatQuery, FileQuery, LoginBody, LogoutBody } from "#shared/protocol";
 import type { ApiContract, ApiRes, ApiRoute } from "#shared/protocol";
 import type { Access, Auth } from "#auth";
 import { blockedDialog } from "#claude";
-import type { Transcripts } from "#claude";
+import type { CommandCatalog, Transcripts } from "#claude";
 import type { ConsoleConfig, FileCell, RuntimeFlags } from "#config";
 import type { Hub } from "#hub";
 import type { SessionRegistry } from "#sessions";
@@ -24,6 +24,7 @@ export interface HttpDeps {
   auth: Auth;
   registry: SessionRegistry;
   transcripts: Transcripts;
+  commands: CommandCatalog;
   sources: SourceTable;
   hub: Hub;
   staticDir: string;
@@ -64,7 +65,7 @@ export function errorReply(code: ErrorCode): { status: number; body: ErrorBody }
   return { status: ERROR_INFO[code].http, body: { error: code } };
 }
 
-function routes({ auth, registry, transcripts, sources }: HttpDeps): Routes {
+function routes({ auth, registry, transcripts, commands, sources }: HttpDeps): Routes {
   /** The `:id` segment to a listed session, polling first when the list is stale (curl with no phone connected). */
   async function sessionFor(raw: string | undefined): Promise<Session | ErrorCode> {
     const parsed = raw ? parseSessionId(raw) : null;
@@ -146,6 +147,14 @@ function routes({ auth, registry, transcripts, sources }: HttpDeps): Routes {
         );
         if (size === null) return errorReply("file_unavailable");
         return { status: 200, file: { path: query.path, contentType, size } };
+      },
+    },
+    "GET /api/sessions/:id/commands": {
+      access: "member",
+      async handle({ params }) {
+        const session = await sessionFor(params.id);
+        if (typeof session === "string") return errorReply(session);
+        return { status: 200, body: await commands.list(session.cwd) };
       },
     },
   };

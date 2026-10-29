@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import type { BlockedDialog, ChatEvent, ClaudeSessionId, Session, SessionGroup, SessionId } from "#shared/domain";
+import type { BlockedDialog, ChatEvent, ClaudeSessionId, Session, SessionGroup, SessionId, SlashCommand } from "#shared/domain";
 import { ERROR_INFO } from "#shared/errors";
 import type { ErrorCode } from "#shared/errors";
 import type { LoginReply, RequestId, ServerMessage, TerminalState } from "#shared/protocol";
@@ -88,6 +88,8 @@ export interface AppState {
   pending: ReadonlyMap<RequestId, Pending>;
   /** Mirrored to localStorage so a 401 detour or a reload keeps the text. */
   drafts: ReadonlyMap<SessionId, string>;
+  /** Slash commands per session, fetched once when the composer first sees a leading "/". */
+  commands: ReadonlyMap<SessionId, readonly SlashCommand[]>;
   ui: { route: Route; tab: ReadonlyMap<SessionId, Tab>; termScale: "fit" | "native"; toast: string | null };
 }
 
@@ -103,6 +105,7 @@ export type Action =
   | { type: "blocked_answered"; sessionId: SessionId }
   | { type: "prompt_sent"; requestId: RequestId; sessionId: SessionId; text: string; at: number }
   | { type: "draft"; sessionId: SessionId; text: string }
+  | { type: "commands"; sessionId: SessionId; commands: readonly SlashCommand[] }
   | { type: "route"; route: Route }
   | { type: "tab"; sessionId: SessionId; tab: Tab }
   | { type: "term_scale"; scale: "fit" | "native" }
@@ -204,6 +207,9 @@ function onChatPage(s: AppState, a: Extract<Action, { type: "chat_page" }>): App
 function onCommandResult(s: AppState, a: Extract<Action, { type: "command_result" }>): AppState {
   const p = s.pending.get(a.requestId);
   if (p) {
+    // A slash command runs inside Claude Code and may never reach the transcript (/cost, measured), so herdr's
+    // acceptance is its whole story; a prompt stays pending until its echo arrives.
+    if (a.ok && p.text.startsWith("/")) return { ...s, pending: mapDelete(s.pending, a.requestId), drafts: mapDelete(s.drafts, p.sessionId) };
     const next: Pending = a.ok ? { ...p, phase: "delivered" } : { ...p, phase: "failed", error: a.error };
     return { ...s, pending: mapSet(s.pending, a.requestId, next), drafts: a.ok ? mapDelete(s.drafts, p.sessionId) : s.drafts };
   }
@@ -286,6 +292,8 @@ export function reduce(s: AppState, a: Action): AppState {
       pending.set(a.requestId, { sessionId: a.sessionId, text: a.text, sentAt: a.at, phase: "sending" });
       return { ...s, pending };
     }
+    case "commands":
+      return { ...s, commands: mapSet(s.commands, a.sessionId, a.commands) };
     case "draft": {
       if ((s.drafts.get(a.sessionId) ?? "") === a.text) return s;
       return { ...s, drafts: a.text === "" ? mapDelete(s.drafts, a.sessionId) : mapSet(s.drafts, a.sessionId, a.text) };
@@ -346,6 +354,7 @@ function initialState(): AppState {
     statusSince: new Map(),
     chat: new Map(),
     blocked: new Map(),
+    commands: new Map(),
     terminal: new Map(),
     pending: new Map(),
     drafts: loadDrafts(),
@@ -446,6 +455,20 @@ export async function loadOlder(sessionId: SessionId): Promise<void> {
 export async function loadBlocked(sessionId: SessionId, forSeq: number): Promise<void> {
   const dialog = await api("GET /api/sessions/:id/blocked", { id: sessionId });
   if (dialog) dispatch({ type: "blocked", sessionId, forSeq, dialog });
+}
+
+const loadingCommands = new Set<SessionId>();
+
+/** Once per session per page load; the list changes only when files on the Mac change. */
+export async function loadCommands(sessionId: SessionId): Promise<void> {
+  if (state.value.commands.has(sessionId) || loadingCommands.has(sessionId)) return;
+  loadingCommands.add(sessionId);
+  try {
+    const commands = await api("GET /api/sessions/:id/commands", { id: sessionId });
+    if (commands) dispatch({ type: "commands", sessionId, commands });
+  } finally {
+    loadingCommands.delete(sessionId);
+  }
 }
 
 const REREAD_DIALOG_MS = 800;

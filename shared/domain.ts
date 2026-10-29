@@ -82,6 +82,17 @@ export type ChatEvent =
   | { kind: "tool_use"; uuid: string; ts: string; toolUseId: string; name: string; summary: string; path?: string }
   | { kind: "tool_result"; uuid: string; ts: string; toolUseId: string; isError: boolean; preview: string };
 
+/**
+ * A slash command Claude Code accepts in a session's input (spec 7.1, commands route): a skill, a command file,
+ * or a built-in. `name` has no leading "/" and is what the phone inserts, e.g. "pstack:poteto-mode".
+ */
+export interface SlashCommand {
+  name: string;
+  /** From the file's frontmatter; "" when it has none. */
+  description: string;
+  source: "builtin" | "user" | "project" | "plugin";
+}
+
 /** herdr's terminal.frame minus `type` and `encoding` (spec 6.4). `bytes` stays base64; the server never decodes it. */
 export interface TerminalFrame {
   seq: number;

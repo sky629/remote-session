@@ -1,5 +1,5 @@
 import { createAuth } from "#auth";
-import { createTranscripts } from "#claude";
+import { createCommandCatalog, createTranscripts } from "#claude";
 import { openConfig, PATHS, readFlags } from "#config";
 import { createHerdrSource } from "#herdr";
 import { createHttpServer } from "#http";
@@ -18,6 +18,7 @@ const flags = readFlags(process.env);
 
 const auth = createAuth({ config: configFile, flags });
 const transcripts = createTranscripts(PATHS.claudeProjects);
+const commands = createCommandCatalog(PATHS.claudeDir);
 const sources: SourceTable = {
   herdr: createHerdrSource({ herdrBin: config.herdrBin, callTimeoutMs: 3000, relistMs: 60_000 }),
 };
@@ -27,7 +28,7 @@ const registry = createSessionRegistry({
   intervalMs: 1500,
 });
 const hub = createHub({ registry, transcripts, sources, auth });
-const server = createHttpServer({ auth, registry, transcripts, sources, hub, staticDir: PATHS.webDist, config: configFile, flags });
+const server = createHttpServer({ auth, registry, transcripts, commands, sources, hub, staticDir: PATHS.webDist, config: configFile, flags });
 server.on("error", (e: NodeJS.ErrnoException) => {
   console.error(e.code === "EADDRINUSE" ? `포트 ${config.port}를 이미 다른 프로세스가 쓰고 있습니다.` : `서버를 시작하지 못했습니다: ${e.message}`);
   process.exit(1);

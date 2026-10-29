@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseSessionId } from "./domain.ts";
-import type { BlockedDialog, Brand, ChatEvent, Session, SessionId, SessionList, TerminalFrame } from "./domain.ts";
+import type { BlockedDialog, Brand, ChatEvent, Session, SessionId, SessionList, SlashCommand, TerminalFrame } from "./domain.ts";
 import type { Result } from "./errors.ts";
 import { HERDR_KEY } from "./keys.ts";
 
@@ -107,6 +107,8 @@ export interface ApiContract {
    * extension (shared/files.ts). The web opens it in a new tab; `res` is a marker, never parsed.
    */
   "GET /api/sessions/:id/file": { query: typeof FileQuery; res: "file" };
+  /** The slash commands this session's Claude Code accepts, for the composer's "/" completion. Sorted by name. */
+  "GET /api/sessions/:id/commands": { res: SlashCommand[] };
 }
 export type ApiRoute = keyof ApiContract;
 export type ApiRes<R extends ApiRoute> = ApiContract[R]["res"];

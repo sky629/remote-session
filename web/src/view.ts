@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { AgentStatus, ChatEvent, Session, SessionGroup } from "#shared/domain";
+import type { AgentStatus, ChatEvent, Session, SessionGroup, SlashCommand } from "#shared/domain";
 
 /** Spec 6.2 as one table. Sorting, the pill and the composer rule all read it; nothing else lists statuses. */
 export const STATUS_VIEW: Readonly<
@@ -161,6 +161,34 @@ markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   tokens[idx]!.attrSet("rel", "noopener noreferrer");
   return renderLinkOpen(tokens, idx, options, env, self);
 };
+
+/** The text after "/" while the draft is one word that starts with "/"; null otherwise, so a sent command or prose shows no list. */
+export function slashPrefix(draft: string): string | null {
+  const m = /^\/(\S*)$/.exec(draft);
+  return m ? m[1]! : null;
+}
+
+/**
+ * Commands for the composer list: names that start with the typed text first, then names whose part after the
+ * plugin colon starts with it ("po" → pstack:poteto-mode), then names that contain it; at most 30, name order
+ * within a rank.
+ */
+export function matchCommands(commands: readonly SlashCommand[], typed: string): SlashCommand[] {
+  const q = typed.toLowerCase();
+  const rank = (c: SlashCommand): number => {
+    const n = c.name.toLowerCase();
+    if (n.startsWith(q)) return 0;
+    const colon = n.indexOf(":");
+    if (colon >= 0 && n.slice(colon + 1).startsWith(q)) return 1;
+    return n.includes(q) ? 2 : 3;
+  };
+  return commands
+    .map((c) => [rank(c), c] as const)
+    .filter(([r]) => r < 3)
+    .sort((a, b) => a[0] - b[0] || a[1].name.localeCompare(b[1].name))
+    .map(([, c]) => c)
+    .slice(0, 30);
+}
 
 /** HTML for an assistant bubble. Safe to inject: the only markup in it is what markdown-it generated. */
 export function renderMarkdown(text: string): string {

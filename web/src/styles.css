@@ -808,6 +808,50 @@ a {
   font-size: inherit;
   text-decoration: underline;
 }
+.composer__commands {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 40vh;
+  margin: 0 0 6px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+.composer__command {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: var(--touch);
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.composer__command:active {
+  background: var(--accent-soft);
+}
+.composer__command-name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--accent);
+}
+.composer__command-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
 .composer__row {
   display: flex;
   align-items: flex-end;

@@ -57,6 +57,7 @@ const server = createHttpServer({
     onAppend: () => () => {},
     wrote: async (_cid, path) => path === written || path === writtenButGone,
   },
+  commands: { list: async (cwd) => [{ name: "pstack:poteto-mode", description: `for ${cwd}`, source: "plugin" }] },
   sources: { herdr: { kind: "herdr", poll: async () => ({ groups: [], sessions: [] }), send: async () => ({ ok: true }), readDialog: async () => ({ ok: true, text: "❯ 1. Yes\n  2. No" }), observeTerminal: () => ({ resync() {}, close() {} }), close: async () => {} } },
   hub: {
     attach(ws) {
@@ -185,6 +186,12 @@ test("a file the session wrote is served under the sandbox CSP; anything else is
     assert.deepEqual(await r.json(), { error: "file_unavailable" }, why);
   }
   assert.equal((await call(url(written))).status, 401, "needs the cookie");
+});
+
+test("the commands route lists the session's slash commands, computed for its cwd", async () => {
+  const r = await call(`/api/sessions/${encodeURIComponent(ID)}/commands`, { headers: { Cookie: await member() } });
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), [{ name: "pstack:poteto-mode", description: "for null", source: "plugin" }]);
 });
 
 test("static files are served, unknown paths get the SPA shell, and nothing outside the bundle leaks", async () => {

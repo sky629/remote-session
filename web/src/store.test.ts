@@ -40,6 +40,7 @@ function initial(rows: Session[] = [session(ID1), session(ID2, "idle", CLAUDE_B)
     statusSince: new Map(),
     chat: new Map(),
     blocked: new Map(),
+    commands: new Map(),
     terminal: new Map(),
     pending: new Map(),
     drafts: new Map(),
@@ -198,6 +199,13 @@ describe("command_result", () => {
     const s = initial(undefined, { pending: new Map([[REQ1, pendingOf("hi", "sending")]]), drafts: new Map([[ID1, "hi"]]) });
     const next = reduce(s, ok(REQ1));
     expect(next.pending.get(REQ1)!.phase).toBe("delivered");
+    expect(next.drafts.has(ID1)).toBe(false);
+  });
+
+  test("ok on a slash command drops it at once: Claude Code runs it locally and may never echo it", () => {
+    const s = initial(undefined, { pending: new Map([[REQ1, pendingOf("/cost", "sending")]]), drafts: new Map([[ID1, "/cost"]]) });
+    const next = reduce(s, ok(REQ1));
+    expect(next.pending.has(REQ1)).toBe(false);
     expect(next.drafts.has(ID1)).toBe(false);
   });
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import type { AgentStatus, ChatEvent, ClaudeSessionId, Session, SessionGroup, SessionId } from "#shared/domain";
+import type { AgentStatus, ChatEvent, ClaudeSessionId, Session, SessionGroup, SessionId, SlashCommand } from "#shared/domain";
 import { echoMatches, groupSessions, mergeEvents, relativeTime, renderMarkdown, shortPath, toBubbles } from "./view.ts";
+import { matchCommands, slashPrefix } from "./view.ts";
 
 function session(paneId: string, status: AgentStatus, stateChangeSeq: number, group = "default"): Session {
   return {
@@ -175,6 +176,31 @@ describe("display helpers", () => {
     [172_800_000, "2일 전"],
   ])("relativeTime(+%dms)", (elapsed, want) => {
     expect(relativeTime(1_000_000, 1_000_000 + elapsed)).toBe(want);
+  });
+});
+
+describe("slash command completion", () => {
+  const cmd = (name: string): SlashCommand => ({ name, description: "", source: name.includes(":") ? "plugin" : "user" });
+  const all = ["review", "pstack:poteto-mode", "poteto-help", "superpowers:brainstorming", "pstack:how", "compact"].map(cmd);
+
+  test("slashPrefix: only a single word that starts with /", () => {
+    expect(slashPrefix("/")).toBe("");
+    expect(slashPrefix("/po")).toBe("po");
+    expect(slashPrefix("/pstack:poteto-mode ")).toBeNull();
+    expect(slashPrefix("/review this")).toBeNull();
+    expect(slashPrefix("hello")).toBeNull();
+  });
+
+  test("matchCommands: prefix, then after the plugin colon, then anywhere; nothing else", () => {
+    expect(matchCommands(all, "po").map((c) => c.name)).toEqual(["poteto-help", "pstack:poteto-mode", "superpowers:brainstorming"]);
+    expect(matchCommands(all, "PS").map((c) => c.name)).toEqual(["pstack:how", "pstack:poteto-mode"]);
+    expect(matchCommands(all, "zzz")).toEqual([]);
+    expect(matchCommands(all, "").map((c) => c.name)).toEqual(["compact", "poteto-help", "pstack:how", "pstack:poteto-mode", "review", "superpowers:brainstorming"]);
+  });
+
+  test("matchCommands: at most 30", () => {
+    const many = Array.from({ length: 50 }, (_, i) => cmd(`c${String(i).padStart(2, "0")}`));
+    expect(matchCommands(many, "c")).toHaveLength(30);
   });
 });
 

@@ -7,9 +7,9 @@ import { KEY_PRESETS } from "#shared/keys";
 import { fileUrl } from "../api.ts";
 import { useNow } from "../clock.ts";
 import { goBack } from "../router.ts";
-import { dispatch, loadBlocked, loadOlder, openChat, pendingLabel, sendKeys, sendPrompt, state } from "../store.ts";
+import { dispatch, loadBlocked, loadCommands, loadOlder, openChat, pendingLabel, sendKeys, sendPrompt, state } from "../store.ts";
 import type { BlockedState, ChatThread, Pending, PendingLabel, Tab } from "../store.ts";
-import { STATUS_VIEW, chatAvailable, renderMarkdown, toBubbles } from "../view.ts";
+import { STATUS_VIEW, chatAvailable, matchCommands, renderMarkdown, slashPrefix, toBubbles } from "../view.ts";
 import type { Bubble } from "../view.ts";
 import { StatusPill } from "./sessions.tsx";
 import { TerminalView } from "./terminal.tsx";
@@ -373,8 +373,31 @@ export function Composer(props: { session: Session; draft: string; sending: bool
   const send = () => {
     if (canSend) sendPrompt(session.id, draft.trim());
   };
+
+  // "/" plus one word opens the command list; the list is fetched once per session, on the first "/".
+  const typed = mode === "blocked" ? null : slashPrefix(draft);
+  const commands = state.value.commands.get(session.id);
+  useEffect(() => {
+    if (typed !== null) void loadCommands(session.id);
+  }, [typed !== null, session.id]);
+  const pick = (name: string) => {
+    dispatch({ type: "draft", sessionId: session.id, text: `/${name} ` });
+    field.current?.focus();
+  };
   return (
     <div class="composer">
+      {typed !== null && commands === undefined && <p class="composer__hint">명령 목록을 불러오는 중입니다.</p>}
+      {typed !== null && commands !== undefined && (
+        <div class="composer__commands" role="listbox" aria-label="슬래시 명령">
+          {matchCommands(commands, typed).map((c) => (
+            <button class="composer__command" type="button" role="option" aria-selected={false} key={c.name} onClick={() => pick(c.name)}>
+              <span class="composer__command-name">/{c.name}</span>
+              {c.description && <span class="composer__command-desc">{c.description}</span>}
+            </button>
+          ))}
+          {matchCommands(commands, typed).length === 0 && <p class="composer__hint">"/{typed}"에 맞는 명령이 없습니다. 그대로 보내면 Claude Code가 해석합니다.</p>}
+        </div>
+      )}
       {mode === "queue_hint" && <p class="composer__hint">작업 중입니다. 보내면 큐에 들어갑니다.</p>}
       {mode === "term_hint" && (
         <p class="composer__hint">
