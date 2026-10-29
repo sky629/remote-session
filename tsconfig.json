@@ -1,0 +1,18 @@
+// Server and shared. erasableSyntaxOnly makes tsc reject what Node's type stripping cannot run
+// (enums, namespaces, parameter properties), so `pnpm check` passing means `node server/src/main.ts` parses.
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["server/src", "shared", "scripts", "web/vite.config.ts"]
+}
