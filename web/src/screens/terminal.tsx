@@ -67,12 +67,29 @@ export function TerminalView(props: { session: Session; scale: "fit" | "native";
   );
 }
 
-/** The KEY_PRESETS rows with bar: true → sendKeys. Buttons >= 44pt, horizontally scrollable. */
+/**
+ * The KEY_PRESETS rows with bar: true → sendKeys. Buttons >= 44pt, horizontally scrollable. A key with repeatAfterMs
+ * ignores a second tap inside that window (Ctrl+C twice exits Claude Code), and shows it as disabled meanwhile.
+ */
 export function KeyBar(props: { onKey(key: string): void; disabled: boolean }): JSX.Element {
+  const lastTap = useRef(new Map<string, number>());
+  const [, rerender] = useState(0);
+  const tap = (k: (typeof KEY_PRESETS)[number]) => {
+    const wait = "repeatAfterMs" in k ? k.repeatAfterMs : 0;
+    const now = Date.now();
+    if (wait && now - (lastTap.current.get(k.key) ?? 0) < wait) return;
+    lastTap.current.set(k.key, now);
+    if (wait) {
+      rerender((n) => n + 1);
+      setTimeout(() => rerender((n) => n + 1), wait);
+    }
+    props.onKey(k.key);
+  };
+  const coolingDown = (k: (typeof KEY_PRESETS)[number]) => "repeatAfterMs" in k && Date.now() - (lastTap.current.get(k.key) ?? 0) < k.repeatAfterMs;
   return (
     <div class="keybar" role="toolbar" aria-label="키 입력">
       {KEY_PRESETS.filter((k) => k.bar).map((k) => (
-        <button class="btn" type="button" key={k.key} disabled={props.disabled} onClick={() => props.onKey(k.key)}>
+        <button class="btn" type="button" key={k.key} disabled={props.disabled || coolingDown(k)} onClick={() => tap(k)}>
           {k.label}
         </button>
       ))}
