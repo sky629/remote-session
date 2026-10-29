@@ -182,12 +182,13 @@ interface Session {
 type ChatEvent =
   | { kind: "user_text";  uuid: string; ts: string; text: string }
   | { kind: "assistant_text"; uuid: string; ts: string; text: string }
-  | { kind: "tool_use";   uuid: string; ts: string; toolUseId: string; name: string; summary: string }
+  | { kind: "tool_use";   uuid: string; ts: string; toolUseId: string; name: string; summary: string; path?: string }
   | { kind: "tool_result"; uuid: string; ts: string; toolUseId: string; isError: boolean; preview: string };
 ```
 
 - `thinking` 블록은 버린다.
 - `tool_use.summary`는 입력에서 한 줄 요약을 만든다(예: `Bash: pnpm test`, `Edit: src/app.ts`). 요약 규칙은 도구 이름별 표로 둔다. 표에 없는 도구는 이름만 보여 준다.
+- `tool_use.path`는 파일을 쓰는 도구(Write, Edit, MultiEdit, NotebookEdit)가 대상으로 삼은 절대 경로다. 다른 도구에는 없다. 7.1절의 파일 라우트와 8절의 산출물 링크가 이 값을 쓴다.
 - `tool_result.preview`는 앞 200자다.
 - UI는 연속된 `tool_use`/`tool_result`를 하나의 접힌 묶음(`Bash ×3, Edit ×1`)으로 보여 준다.
 
@@ -252,6 +253,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 - `GET /api/sessions` → `Session[]`. 12절의 curl 검증과 첫 화면용. 폰은 보통 WebSocket의 `sessions` 메시지로 받는다.
 - `GET /api/sessions/:id/chat?before=<uuid>&limit=50` → `ChatEvent[]`. 위로 스크롤하면 더 읽는다.
 - `GET /api/sessions/:id/blocked` → `{ text: string; options: {key: string; label: string}[] }`. `detection` 소스 텍스트와 파싱된 선택지.
+- `GET /api/sessions/:id/file?path=<절대 경로>` → 그 파일 자체(JSON이 아니다). 이 세션의 transcript에 그 경로를 쓴 `tool_use`가 있고, 확장자가 열람 표(`shared/files.ts`: html, htm, svg, png, jpg, jpeg, gif, webp, pdf)에 있을 때만 준다. 아니면 404 `file_unavailable`이다. 응답에는 `Content-Security-Policy: sandbox allow-scripts allow-popups allow-forms allow-modals`를 붙인다. 열린 문서는 불투명 출처로 실행되므로 로그인 쿠키(SameSite=Strict)가 붙지 않고 Origin이 `null`이 되어, 이 서버의 API나 WebSocket을 쓰지 못한다.
 - `WS /ws` → 서버가 다음 메시지를 보낸다. 폰은 `Command`에 `requestId`를 붙여 보낸다.
   - `{type:"sessions", groups:[{source, name, reachable}], sessions}`: 항상 전체 목록이고 바뀌었을 때만 보낸다. 폰은 목록을 통째로 바꾼다(유실된 메시지가 다음 메시지로 저절로 복구된다). `groups`는 pane이 하나도 없는 herdr 세션(예: `rocket`)도 빈 그룹으로 보여 주기 위한 것이다.
   - `{type:"chat", sessionId, events}`: 목록에 있는 Claude 세션의 transcript에 추가된 이벤트. 모든 클라이언트에 간다.
@@ -283,7 +285,7 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
    - 403: Tailscale 관문에서 막힌 기기에는 로그인 화면 대신 "이 기기는 허용되지 않았습니다" 화면만 보여 준다. 암호를 시도할 기회를 주지 않는다.
    - 로그아웃: 목록 화면 메뉴에 "이 기기 로그아웃"과 "모든 기기 로그아웃"을 둔다. 메뉴의 "로그인 기록"은 최근 20건(시각, 성공 여부, 기기 종류)을 보여 준다.
 1. **세션 목록.** herdr 세션별로 묶는다. 한 줄에 워크스페이스 라벨, 상태 표시, 제목, 짧은 경로(`~/.herdr/worktrees/rocket/remove-lab`). `blocked`는 맨 위, 테두리 강조. 상단에 "N 작업 중" 요약.
-2. **대화.** 헤더에 뒤로가기, 라벨, 상태 표시, 탭(대화 | 터미널). 본문은 사용자 말풍선(오른쪽), Claude 말풍선(왼쪽), 접힌 도구 묶음 칩. Claude 말풍선은 마크다운으로 렌더링하되 원문 HTML은 해석하지 않는다(`markdown-it`, `html: false`). 화면에 없는 세션의 스레드만 최근 500개로 자른다. 보고 있는 스레드는 자르지 않는다. `blocked`면 하단에 승인 카드(원문 텍스트 + 선택지 버튼). 하단 입력창은 6.2 표를 따른다. 새 이벤트가 오면 맨 아래에 있을 때만 자동 스크롤한다.
+2. **대화.** 헤더에 뒤로가기, 라벨, 상태 표시, 탭(대화 | 터미널). 본문은 사용자 말풍선(오른쪽), Claude 말풍선(왼쪽), 접힌 도구 묶음 칩. 도구 묶음 아래에는 그 묶음이 쓴 열람 가능한 파일(HTML 등)의 이름을 링크로 보여 주고, 누르면 7.1절의 파일 라우트를 새 탭으로 연다. Claude 말풍선은 마크다운으로 렌더링하되 원문 HTML은 해석하지 않는다(`markdown-it`, `html: false`). 맨 URL은 링크로 바꾼다(`linkify`). 승인 카드의 원문 상자는 맨 아래(대화상자가 있는 곳)로 스크롤된 채 열린다. 화면에 없는 세션의 스레드만 최근 500개로 자른다. 보고 있는 스레드는 자르지 않는다. `blocked`면 하단에 승인 카드(원문 텍스트 + 선택지 버튼). 하단 입력창은 6.2 표를 따른다. 새 이벤트가 오면 맨 아래에 있을 때만 자동 스크롤한다.
 3. **터미널.** xterm.js 뷰를 pane 크기(예: 155×54)로 만든다. 기본은 폰 폭에 맞춰 통째로 축소해서 보여 준다(글자는 작지만 전체 화면과 프롬프트가 보인다). 상단 토글 "원래 크기"를 켜면 1:1 크기에 가로 스크롤이 된다. 가로 모드에서는 축소 비율만 다시 계산한다. 하단에 키 버튼 줄(Esc, Enter, Ctrl+C, ↑, ↓, Tab, 1, 2, 3)과 글자 입력란이 있다. 입력란의 글은 `raw_text`로 보내고 Enter는 붙이지 않으므로, 보낸 뒤 Enter 버튼을 눌러 확정한다. 이 입력란은 승인 대화상자에서 글로 답해야 할 때(예: "No, and tell Claude what to do differently", AskUserQuestion의 직접 입력) 쓴다. 대화 화면의 승인 카드에는 "글로 답하려면 터미널 탭에서 입력하세요" 안내를 둔다.
 
 공통: 다크/라이트 모두 지원. 폰 safe area를 지킨다. 연결이 끊기면 상단에 띠로 알리고 자동 재접속한다.
@@ -310,13 +312,14 @@ herdr server (default, rocket)  ──►  claude --resume … (×N)
 - 쿠키는 `HttpOnly; Secure; SameSite=Strict; Path=/`이고 Max-Age는 30일이다. 개발용 HTTP 접속에서는 `Secure`를 뺀다.
 - 로그인 실패는 IP당 분당 5회까지만 받고, 넘으면 429와 함께 60초를 기다리게 한다. IP는 `X-Forwarded-For`의 첫 값이고, 이 헤더는 같은 Mac의 다른 프로세스가 위조할 수 있으므로 전체 상한(분당 20회)을 함께 둔다.
 - `POST /api/login`과 WebSocket 업그레이드에서 `Origin` 헤더가 설정의 공개 주소(`https://macbookpro.tailfdccb7.ts.net`)와 같아야 한다. 폰 Safari에서 연 다른 웹 페이지가 같은 쿠키나 같은 Tailscale 신원으로 이 서버에 요청을 보내는 것을 막기 위해서다. 개발용 주소는 환경 변수로 하나 더 허용한다.
+- 파일 라우트(7.1)의 허용 목록은 transcript다. Claude가 그 세션에서 쓴 파일만 열리고, Mac의 다른 파일은 경로를 알아도 열리지 않는다. 열린 문서는 `sandbox` CSP 때문에 소유자의 로그인으로 이 서버에 요청을 보낼 수 없다.
 - 폰에서 들어온 텍스트는 herdr에 그대로 넘긴다. 셸을 거치지 않는다(`agent.prompt`는 소켓 JSON이다). Claude 세션 id는 UUID 형식을 통과한 값만 브랜드 타입으로 만들어 파일 이름에 쓴다.
 
 ### 10.1 오류 코드
 
 서버 안에서 모듈 경계를 넘는 오류는 아래 코드 하나뿐이다. herdr 오류 코드는 어댑터 안에서 이 코드로 바뀌고, 모르는 코드는 `source_error`가 된다. 폰 문구와 HTTP 상태는 코드별 표 하나에서 나온다.
 
-`agent_blocked`(409, 재시도 금지), `agent_not_ready`(409), `delivery_unconfirmed`(504, 재시도 금지. 보낸 뒤 소켓이 끊겨 결과를 모름), `pane_closed`(410), `source_unreachable`(503, 자동 복구), `source_error`(502), `stale_dialog`(409, 다시 읽기), `stale_cursor`(410, 최신 페이지 다시 받기), `no_transcript`(404), `invalid_command`(400), `unauthorized`(401), `forbidden`(403), `wrong_passphrase`(401), `rate_limited`(429), `internal`(500).
+`agent_blocked`(409, 재시도 금지), `agent_not_ready`(409), `delivery_unconfirmed`(504, 재시도 금지. 보낸 뒤 소켓이 끊겨 결과를 모름), `pane_closed`(410), `source_unreachable`(503, 자동 복구), `source_error`(502), `stale_dialog`(409, 다시 읽기), `stale_cursor`(410, 최신 페이지 다시 받기), `no_transcript`(404), `file_unavailable`(404), `invalid_command`(400), `unauthorized`(401), `forbidden`(403), `wrong_passphrase`(401), `rate_limited`(429), `internal`(500).
 - transcript 파일은 읽기만 한다. `~/.claude/projects` 밖의 경로는 열지 않는다.
 - 로그에 메시지 본문을 남기지 않는다.
 

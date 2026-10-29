@@ -665,6 +665,30 @@ a {
   position: absolute;
   inset: -6px -4px;
 }
+.tools__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.tools__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.tools__file::before {
+  content: "↗";
+  font-size: 12px;
+}
 .tools__list {
   margin: 6px 0 0;
   padding: 0;

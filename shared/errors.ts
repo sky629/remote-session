@@ -14,6 +14,7 @@ export const ERROR_INFO = {
   stale_dialog: { http: 409, retry: "refresh", phone: "승인 화면이 바뀌어서 선택을 보내지 않았습니다. 화면을 다시 확인하세요." },
   stale_cursor: { http: 410, retry: "refresh", phone: "대화 기록이 바뀌어서 최신 기록부터 다시 읽습니다." },
   no_transcript: { http: 404, retry: "never", phone: "이 세션의 대화 기록 파일을 찾지 못했습니다. 터미널 탭을 사용하세요." },
+  file_unavailable: { http: 404, retry: "never", phone: "이 세션이 쓴 파일이 아니거나 지금은 없습니다." },
   invalid_command: { http: 400, retry: "never", phone: "요청 형식이 올바르지 않습니다." },
   unauthorized: { http: 401, retry: "never", phone: "로그인이 필요합니다." },
   forbidden: { http: 403, retry: "never", phone: "이 기기는 허용되지 않았습니다." },

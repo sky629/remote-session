@@ -10,6 +10,11 @@ export type ApiArgs<R extends ApiRoute> = (R extends `${string}:id${string}` ? {
   (ApiContract[R] extends { req: infer S extends z.ZodType } ? { body: z.input<S> } : unknown) &
   (ApiContract[R] extends { query: infer S extends z.ZodType } ? { query?: z.input<S> } : unknown);
 
+/** The file route as a link target: the browser opens it in a new tab, so it never goes through api(). */
+export function fileUrl(id: SessionId, path: string): string {
+  return `/api/sessions/${encodeURIComponent(id)}/file?path=${encodeURIComponent(path)}`;
+}
+
 function errorCodeOf(body: unknown): ErrorCode | null {
   const code = typeof body === "object" && body !== null ? (body as { error?: unknown }).error : undefined;
   return typeof code === "string" && code in ERROR_INFO ? (code as ErrorCode) : null;

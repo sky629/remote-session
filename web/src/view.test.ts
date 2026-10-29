@@ -195,9 +195,9 @@ describe("renderMarkdown", () => {
     expect(renderMarkdown("[x](https://example.com)")).toContain('target="_blank" rel="noopener noreferrer"');
   });
 
-  test("does not turn a bare URL into a link and keeps single line breaks", () => {
-    const html = renderMarkdown("see https://example.com\nnext");
-    expect(html).not.toContain("<a ");
+  test("turns a bare URL into a link that opens outside the app, and keeps single line breaks", () => {
+    const html = renderMarkdown("see https://claude.ai/artifact/abc\nnext");
+    expect(html).toContain('<a href="https://claude.ai/artifact/abc" target="_blank" rel="noopener noreferrer">https://claude.ai/artifact/abc</a>');
     expect(html).toContain("<br>");
   });
 });

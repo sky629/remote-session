@@ -2,14 +2,15 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, STATUS_CODES } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { extname, join, normalize, resolve, sep } from "node:path";
+import { extname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { WebSocketServer } from "ws";
 import type { z } from "zod";
 import { parseSessionId } from "#shared/domain";
 import type { Session } from "#shared/domain";
 import { ERROR_INFO } from "#shared/errors";
 import type { ErrorCode } from "#shared/errors";
-import { ChatQuery, LoginBody, LogoutBody } from "#shared/protocol";
+import { viewableType } from "#shared/files";
+import { ChatQuery, FileQuery, LoginBody, LogoutBody } from "#shared/protocol";
 import type { ApiContract, ApiRes, ApiRoute } from "#shared/protocol";
 import type { Access, Auth } from "#auth";
 import { blockedDialog } from "#claude";
@@ -45,7 +46,9 @@ interface Ctx<R extends ApiRoute> {
   body: Parsed<R, "req">;
   query: Parsed<R, "query">;
 }
-type Reply<R extends ApiRoute> = { status: number; body: ApiRes<R> | ErrorBody; headers?: Record<string, string> };
+/** A file streamed as itself; the dispatcher sends it under FILE_CSP instead of as JSON. */
+type ServedFile = { path: string; contentType: string; size: number };
+type Reply<R extends ApiRoute> = { status: number; body: ApiRes<R> | ErrorBody; headers?: Record<string, string> } | { status: 200; file: ServedFile };
 
 /** A route must carry exactly the schemas its ApiContract entry names, so parsing cannot drift from the contract. */
 type RouteSpec<R extends ApiRoute> = {
@@ -127,6 +130,24 @@ function routes({ auth, registry, transcripts, sources }: HttpDeps): Routes {
         return read.ok ? { status: 200, body: blockedDialog(read.text) } : errorReply(read.error);
       },
     },
+    /** The transcript is the allowlist: only a file this session's Claude wrote, with a viewable extension, is served. */
+    "GET /api/sessions/:id/file": {
+      access: "member",
+      query: FileQuery,
+      async handle({ params, query }) {
+        const session = await sessionFor(params.id);
+        if (typeof session === "string") return errorReply(session);
+        if (!session.claudeSessionId) return errorReply("no_transcript");
+        const contentType = viewableType(query.path);
+        if (!contentType || !isAbsolute(query.path) || !(await transcripts.wrote(session.claudeSessionId, query.path))) return errorReply("file_unavailable");
+        const size = await stat(query.path).then(
+          (s) => (s.isFile() ? s.size : null),
+          () => null,
+        );
+        if (size === null) return errorReply("file_unavailable");
+        return { status: 200, file: { path: query.path, contentType, size } };
+      },
+    },
   };
 }
 
@@ -135,7 +156,7 @@ type AnyRoute = {
   access: "public" | "member";
   req?: z.ZodType;
   query?: z.ZodType;
-  handle(ctx: Ctx<ApiRoute>): Promise<{ status: number; body: unknown; headers?: Record<string, string> }>;
+  handle(ctx: Ctx<ApiRoute>): Promise<{ status: number; body: unknown; headers?: Record<string, string> } | { status: 200; file: ServedFile }>;
 };
 
 /** Each contract key as a matcher. `:id` takes the raw segment, still percent-encoded, up to the next "/". */
@@ -148,6 +169,13 @@ function matchers(table: Routes) {
 }
 
 const BODY_LIMIT = 512 * 1024;
+
+/**
+ * A written file runs with an opaque origin under `sandbox`: SameSite=Strict withholds the login cookie from its
+ * requests and its Origin is "null", so a page Claude wrote cannot drive /api or /ws with the owner's login.
+ * allow-scripts keeps interactive HTML working; nothing here grants same-origin.
+ */
+const FILE_CSP = "sandbox allow-scripts allow-popups allow-forms allow-modals";
 
 const FORBIDDEN_PAGE = `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -208,7 +236,13 @@ export function createHttpServer(deps: HttpDeps): Server {
   }
 
   async function api(req: IncomingMessage, res: ServerResponse, url: URL, access: Ctx<ApiRoute>["access"]): Promise<void> {
-    const reply = (r: { status: number; body: unknown; headers?: Record<string, string> }) => json(res, r.status, r.body, r.headers);
+    const reply = (r: Awaited<ReturnType<AnyRoute["handle"]>>) => {
+      if (!("file" in r)) return json(res, r.status, r.body, r.headers);
+      res.writeHead(200, { "Content-Type": r.file.contentType, "Content-Length": r.file.size, "Cache-Control": "no-store", "Content-Security-Policy": FILE_CSP });
+      createReadStream(r.file.path)
+        .on("error", () => res.destroy())
+        .pipe(res);
+    };
     let route: AnyRoute | null = null;
     let segment: string | undefined;
     for (const m of table) {

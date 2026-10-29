@@ -78,7 +78,8 @@ export function parseClaudeSessionId(raw: unknown): ClaudeSessionId | null {
 export type ChatEvent =
   | { kind: "user_text"; uuid: string; ts: string; text: string }
   | { kind: "assistant_text"; uuid: string; ts: string; text: string }
-  | { kind: "tool_use"; uuid: string; ts: string; toolUseId: string; name: string; summary: string }
+  /** `path`: the absolute file a writing tool (Write, Edit, MultiEdit, NotebookEdit) targeted; absent for other tools. */
+  | { kind: "tool_use"; uuid: string; ts: string; toolUseId: string; name: string; summary: string; path?: string }
   | { kind: "tool_result"; uuid: string; ts: string; toolUseId: string; isError: boolean; preview: string };
 
 /** herdr's terminal.frame minus `type` and `encoding` (spec 6.4). `bytes` stays base64; the server never decodes it. */

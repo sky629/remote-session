@@ -31,6 +31,11 @@ export interface Transcripts {
   follow(ids: ReadonlySet<ClaudeSessionId>): void;
   /** Events appended to a followed file, in file order, each event id exactly once. */
   onAppend(listener: (id: ClaudeSessionId, events: ChatEvent[]) => void): () => void;
+  /**
+   * Whether a tool_use in this transcript wrote `path` (ChatEvent.path). The transcript is the allowlist of the
+   * file route, so this reads the whole file on each call; a tap triggers it, never a poll. No file → false.
+   */
+  wrote(id: ClaudeSessionId, path: string): Promise<boolean>;
 }
 
 /**
@@ -246,7 +251,30 @@ export function createTranscripts(root: string): Transcripts {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+
+    async wrote(id, path) {
+      const file = await locate(id);
+      if (!file) return false;
+      return withFile(file, async (fh) => {
+        const { size } = await fh.stat();
+        let rest = Buffer.alloc(0);
+        for (let at = 0; at < size; at += BLOCK) {
+          const buf = Buffer.concat([rest, await readAt(fh, at, Math.min(size, at + BLOCK))]);
+          const end = at + BLOCK >= size ? buf.length : buf.lastIndexOf(0x0a) + 1;
+          rest = buf.subarray(end);
+          if (writes(buf.subarray(0, end).toString("utf8"), path)) return true;
+        }
+        return false;
+      }).catch(() => false);
+    },
   };
+}
+
+/** Only tool_use lines are parsed; the substring test is cheaper than JSON.parse on every chat line. */
+function writes(text: string, path: string): boolean {
+  return text
+    .split("\n")
+    .some((line) => line.includes('"tool_use"') && mayBeChatLine(line) && lineToEvents(line).some((e) => e.kind === "tool_use" && e.path === path));
 }
 
 function parse(buf: Buffer): ChatEvent[] {

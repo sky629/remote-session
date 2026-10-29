@@ -7,7 +7,8 @@ import type { ChatEvent } from "#shared/domain";
  *   user, text blocks         → user_text (e.g. "[Request interrupted by user]"), through USER_WRAPPERS as well
  *   user, tool_result blocks  → tool_result; preview = first 200 chars of its text parts; isError = is_error === true
  *   assistant, text           → assistant_text
- *   assistant, tool_use       → tool_use; summary = `${name}: ${TOOL_SUMMARY[name](input)}`, or name alone
+ *   assistant, tool_use       → tool_use; summary = `${name}: ${TOOL_SUMMARY[name](input)}`, or name alone;
+ *                               path = the file argument of a writing tool (FILE_PATH_ARG), else absent
  *   assistant, thinking       → dropped, like every other block type (image, server_tool_use, ...)
  * A line that does not parse gives [].
  */
@@ -63,8 +64,11 @@ function assistantPieces(content: unknown): Piece[] {
     if (!isObject(b)) return [];
     if (b.type === "text" && typeof b.text === "string" && b.text.length > 0) return [{ kind: "assistant_text", text: b.text }];
     if (b.type === "tool_use" && typeof b.id === "string" && typeof b.name === "string") {
-      const arg = TOOL_SUMMARY[b.name]?.(isObject(b.input) ? b.input : {});
-      return [{ kind: "tool_use", toolUseId: b.id, name: b.name, summary: cut(arg ? `${b.name}: ${arg}` : b.name, 120) }];
+      const input = isObject(b.input) ? b.input : {};
+      const arg = TOOL_SUMMARY[b.name]?.(input);
+      const pathArg = FILE_PATH_ARG[b.name];
+      const path = pathArg ? str(input[pathArg]) : null;
+      return [{ kind: "tool_use", toolUseId: b.id, name: b.name, summary: cut(arg ? `${b.name}: ${arg}` : b.name, 120), ...(path ? { path } : {}) }];
     }
     return [];
   });
@@ -104,6 +108,9 @@ export const TOOL_SUMMARY: Readonly<Record<string, (input: Record<string, unknow
   WebSearch: (i) => str(i.query),
   Skill: (i) => str(i.skill),
 };
+
+/** The input field that names the file a writing tool changes. Read is absent on purpose: reading is not output. */
+const FILE_PATH_ARG: Readonly<Record<string, string>> = { Write: "file_path", Edit: "file_path", MultiEdit: "file_path", NotebookEdit: "notebook_path" };
 
 const tag = (name: string, t: string): string | null => new RegExp(`<${name}>(.*?)</${name}>`, "s").exec(t)?.[1]?.trim() || null;
 const slashCommand = (t: string): string | null => {

@@ -63,6 +63,7 @@ export type ServerMessage =
 
 export const LoginBody = z.object({ passphrase: z.string().min(1).max(1024) });
 export const LogoutBody = z.object({ all: z.boolean() });
+export const FileQuery = z.object({ path: z.string().min(1).max(4096) });
 export const ChatQuery = z.object({
   before: z.string().min(1).max(80).optional(),
   limit: z.coerce.number().int().min(1).max(LIMITS.pageMax).default(LIMITS.pageDefault),
@@ -101,6 +102,11 @@ export interface ApiContract {
   /** Oldest first, strictly older than `before`. Fewer than `limit` means the start of the transcript. */
   "GET /api/sessions/:id/chat": { query: typeof ChatQuery; res: ChatEvent[] };
   "GET /api/sessions/:id/blocked": { res: BlockedDialog };
+  /**
+   * The file itself, not JSON: a file this session's transcript shows a writing tool_use for, with a viewable
+   * extension (shared/files.ts). The web opens it in a new tab; `res` is a marker, never parsed.
+   */
+  "GET /api/sessions/:id/file": { query: typeof FileQuery; res: "file" };
 }
 export type ApiRoute = keyof ApiContract;
 export type ApiRes<R extends ApiRoute> = ApiContract[R]["res"];

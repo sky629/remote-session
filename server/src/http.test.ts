@@ -25,6 +25,9 @@ mkdirSync(join(staticDir, "assets"), { recursive: true });
 writeFileSync(join(staticDir, "index.html"), "<!doctype html><title>shell</title>");
 writeFileSync(join(staticDir, "assets", "app.js"), "console.log(1)");
 writeFileSync(join(dir, "secret.txt"), "outside the bundle");
+const written = join(dir, "report.html");
+writeFileSync(written, "<p>report</p>");
+const writtenButGone = join(dir, "gone.html");
 
 const CID = parseClaudeSessionId("00000000-0000-4000-8000-000000000001")!;
 const ID = makeSessionId("herdr", "default", "w11:p1");
@@ -52,6 +55,7 @@ const server = createHttpServer({
     },
     follow() {},
     onAppend: () => () => {},
+    wrote: async (_cid, path) => path === written || path === writtenButGone,
   },
   sources: { herdr: { kind: "herdr", poll: async () => ({ groups: [], sessions: [] }), send: async () => ({ ok: true }), readDialog: async () => ({ ok: true, text: "❯ 1. Yes\n  2. No" }), observeTerminal: () => ({ resync() {}, close() {} }), close: async () => {} } },
   hub: {
@@ -159,6 +163,28 @@ test("the :id segment is percent-decoded before it is parsed, and a bad escape i
     assert.equal(r.status, status, path);
     assert.deepEqual(await r.json(), { error }, path);
   }
+});
+
+test("a file the session wrote is served under the sandbox CSP; anything else is file_unavailable", async () => {
+  const headers = { Cookie: await member() };
+  const url = (p: string) => `/api/sessions/${encodeURIComponent(ID)}/file?path=${encodeURIComponent(p)}`;
+  const ok = await call(url(written), { headers });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(ok.headers.get("content-security-policy"), "sandbox allow-scripts allow-popups allow-forms allow-modals");
+  assert.equal(ok.headers.get("cache-control"), "no-store");
+  assert.equal(await ok.text(), "<p>report</p>");
+  for (const [p, why] of [
+    [join(dir, "secret.txt"), "not a viewable type"],
+    [join(dir, "other.html"), "never written by this session"],
+    [writtenButGone, "written, but no longer on disk"],
+    ["report.html", "not absolute"],
+  ] as const) {
+    const r = await call(url(p), { headers });
+    assert.equal(r.status, 404, why);
+    assert.deepEqual(await r.json(), { error: "file_unavailable" }, why);
+  }
+  assert.equal((await call(url(written))).status, 401, "needs the cookie");
 });
 
 test("static files are served, unknown paths get the SPA shell, and nothing outside the bundle leaks", async () => {

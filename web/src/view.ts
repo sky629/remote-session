@@ -152,8 +152,9 @@ export function relativeTime(since: number, now: number): string {
 }
 
 // html: false leaves any markup in Claude's text as escaped text, and markdown-it refuses javascript: and data: links.
+// linkify makes the bare URLs Claude pastes (artifact links, PR links) tappable; they get the same target and rel.
 // Images are off because a remote image would be fetched the moment a quoted web page renders.
-const markdown = new MarkdownIt({ html: false, linkify: false, typographer: false, breaks: true }).disable("image");
+const markdown = new MarkdownIt({ html: false, linkify: true, typographer: false, breaks: true }).disable("image");
 const renderLinkOpen = markdown.renderer.rules.link_open ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
 markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   tokens[idx]!.attrSet("target", "_blank");

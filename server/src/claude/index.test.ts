@@ -35,6 +35,26 @@ async function until<T>(read: () => T, ok: (v: T) => boolean, label: string): Pr
   }
 }
 
+test("wrote: true only for a path a writing tool targeted in this transcript", async () => {
+  const use = (uuid: string, name: string, input: unknown) =>
+    JSON.stringify({ type: "assistant", uuid, timestamp: "2026-10-29T00:00:00Z", message: { content: [{ type: "tool_use", id: `tu-${uuid}`, name, input }] } }) + "\n";
+  const content = lines(0, 3) + use("w", "Write", { file_path: "/out/report.html", content: "<p>hi</p>" }) + use("r", "Read", { file_path: "/etc/hosts" }) + lines(4, 6);
+  const { root, id } = project(content);
+  const t = createTranscripts(root);
+  assert.equal(await t.wrote(id, "/out/report.html"), true);
+  assert.equal(await t.wrote(id, "/etc/hosts"), false, "a Read is not a write");
+  assert.equal(await t.wrote(id, "/out/other.html"), false);
+  assert.equal(await t.wrote(parseClaudeSessionId("00000000-0000-4000-8000-ffffffffffff")!, "/out/report.html"), false, "no transcript");
+});
+
+test("wrote: a write recorded past the first block is still found", async () => {
+  const write = JSON.stringify({ type: "assistant", uuid: "u-w", timestamp: "2026-10-29T00:00:00Z", message: { content: [{ type: "tool_use", id: "tu-w", name: "Write", input: { file_path: "/out/late.svg", content: "" } }] } }) + "\n";
+  const content = Array.from({ length: 3000 }, (_, i) => record(i) + noise(i)).join("") + write;
+  assert.ok(content.length > 3 * 256 * 1024, "the file spans several blocks");
+  const { root, id } = project(content);
+  assert.equal(await createTranscripts(root).wrote(id, "/out/late.svg"), true);
+});
+
 test("the newest page comes from the tail, and older pages walk back to the file start", async () => {
   const { root, id } = project(lines(0, 10));
   const t = createTranscripts(root);

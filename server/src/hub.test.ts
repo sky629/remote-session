@@ -96,6 +96,7 @@ function setup() {
     locate: async () => null,
     page: async () => ({ ok: false, error: "no_transcript" }),
     follow: (ids) => void followed.push(ids),
+    wrote: async () => false,
     onAppend: (l) => {
       appendListener = l;
       return () => {};

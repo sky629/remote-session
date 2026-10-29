@@ -9,7 +9,7 @@ const TS = "2026-10-28T01:02:03.000Z";
 const line = (type: string, content: unknown, extra: Record<string, unknown> = {}) =>
   JSON.stringify({ type, uuid: UUID, timestamp: TS, sessionId: "s", message: { role: type, content }, ...extra });
 const userText = (text: string): ChatEvent => ({ kind: "user_text", uuid: UUID, ts: TS, text });
-const toolUse = (name: string, summary: string): ChatEvent => ({ kind: "tool_use", uuid: UUID, ts: TS, toolUseId: "tu_1", name, summary });
+const toolUse = (name: string, summary: string, path?: string): ChatEvent => ({ kind: "tool_use", uuid: UUID, ts: TS, toolUseId: "tu_1", name, summary, ...(path ? { path } : {}) });
 const use = (name: string, input: unknown) => line("assistant", [{ type: "tool_use", id: "tu_1", name, input }]);
 
 const cases: [name: string, input: string, expected: ChatEvent[]][] = [
@@ -40,10 +40,11 @@ const cases: [name: string, input: string, expected: ChatEvent[]][] = [
   ["thinking is dropped", line("assistant", [{ type: "thinking", thinking: "hmm", signature: "s" }]), []],
   ["Bash shows the first line of the command", use("Bash", { command: "pnpm test\necho done" }), [toolUse("Bash", "Bash: pnpm test")]],
   ["Read", use("Read", { file_path: "/w/a.ts" }), [toolUse("Read", "Read: /w/a.ts")]],
-  ["Edit", use("Edit", { file_path: "/w/a.ts", old_string: "a", new_string: "b" }), [toolUse("Edit", "Edit: /w/a.ts")]],
-  ["MultiEdit", use("MultiEdit", { file_path: "/w/a.ts", edits: [] }), [toolUse("MultiEdit", "MultiEdit: /w/a.ts")]],
-  ["Write", use("Write", { file_path: "/w/b.ts", content: "x" }), [toolUse("Write", "Write: /w/b.ts")]],
-  ["NotebookEdit", use("NotebookEdit", { notebook_path: "/w/n.ipynb" }), [toolUse("NotebookEdit", "NotebookEdit: /w/n.ipynb")]],
+  ["Edit carries the path it wrote", use("Edit", { file_path: "/w/a.ts", old_string: "a", new_string: "b" }), [toolUse("Edit", "Edit: /w/a.ts", "/w/a.ts")]],
+  ["MultiEdit carries the path it wrote", use("MultiEdit", { file_path: "/w/a.ts", edits: [] }), [toolUse("MultiEdit", "MultiEdit: /w/a.ts", "/w/a.ts")]],
+  ["Write carries the path it wrote", use("Write", { file_path: "/w/b.ts", content: "x" }), [toolUse("Write", "Write: /w/b.ts", "/w/b.ts")]],
+  ["NotebookEdit carries the path it wrote", use("NotebookEdit", { notebook_path: "/w/n.ipynb" }), [toolUse("NotebookEdit", "NotebookEdit: /w/n.ipynb", "/w/n.ipynb")]],
+  ["a Write without a string path has no path", use("Write", { file_path: 7 }), [toolUse("Write", "Write")]],
   ["Grep", use("Grep", { pattern: "TODO" }), [toolUse("Grep", "Grep: TODO")]],
   ["Glob", use("Glob", { pattern: "**/*.ts" }), [toolUse("Glob", "Glob: **/*.ts")]],
   ["Agent", use("Agent", { description: "review the diff", prompt: "..." }), [toolUse("Agent", "Agent: review the diff")]],
