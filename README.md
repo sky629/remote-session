@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/sessions.png" width="230" alt="세션 목록 화면">&nbsp;&nbsp;
-  <img src="docs/images/chat-approval.png" width="230" alt="대화 탭과 승인 카드">&nbsp;&nbsp;
-  <img src="docs/images/terminal.png" width="230" alt="터미널 탭">
+  <img src="docs/images/sessions.png" width="205" alt="세션 목록 화면">
+  <img src="docs/images/chat-approval.png" width="205" alt="대화 탭과 승인 카드">
+  <img src="docs/images/terminal.png" width="205" alt="터미널 탭">
 </p>
 
 > 이 문서의 화면은 `web/mock`의 예시 데이터로 찍은 것입니다. 실제 화면에는 내 herdr 세션이 그대로 보입니다.
@@ -25,13 +25,15 @@
 Mac에서 Claude Code 세션들은 [herdr](https://herdr.dev) 안에서 돌아갑니다. 이 콘솔은 herdr의 소켓 API로 세션 목록과 상태를 읽고, 메시지와 키 입력을 전달합니다. 대화 내용은 Claude Code가 남기는 transcript 파일에서 읽습니다. 폰은 Tailscale 테일넷 안에서만 접속할 수 있고, 들어온 뒤에도 암호를 맞혀야 화면을 볼 수 있습니다.
 
 ```mermaid
-flowchart LR
-  phone["아이폰 Safari<br/>(홈 화면 앱)"] -->|"HTTPS, 테일넷 안에서만"| serve["Tailscale Serve<br/>신원 헤더를 붙임"]
-  serve -->|"127.0.0.1:7420"| srv["세션 콘솔 서버<br/>Node 24 + ws"]
-  srv -->|"소켓 API: 목록, prompt, 키"| herdr["herdr server"]
-  herdr --> c1["Claude Code 세션"]
-  herdr --> c2["Claude Code 세션"]
-  srv -.->|"읽기만"| tr["~/.claude/projects/*.jsonl<br/>대화 기록"]
+flowchart TB
+  phone["아이폰 Safari (홈 화면 앱)"] -->|"HTTPS, 테일넷 안에서만"| serve
+  subgraph mac["Mac"]
+    serve["Tailscale Serve<br/>신원 헤더를 붙임"] -->|"127.0.0.1:7420"| srv["세션 콘솔 서버<br/>Node 24 + ws"]
+    srv -->|"소켓 API: 목록, prompt, 키 입력"| herdr["herdr server"]
+    srv -.->|"읽기만"| tr["~/.claude/projects/*.jsonl<br/>대화 기록"]
+    herdr --> c1["Claude Code 세션"]
+    herdr --> c2["Claude Code 세션"]
+  end
 ```
 
 ## 화면 안내
@@ -69,10 +71,10 @@ herdr 세션(그룹)별로 묶어서 보여 줍니다. 한 줄에 워크스페�
 
 | 상태 | 뜻 |
 | --- | --- |
-| **승인 필요** | Claude가 승인 대화상자나 질문을 띄우고 기다리는 중입니다. 목록 맨 위에 테두리를 강조해서 올립니다. |
-| **작업 중** | Claude가 도구를 쓰거나 답을 쓰는 중입니다. 상단에 "N 작업 중" 요약이 붙습니다. |
+| **승인&nbsp;필요** | Claude가 승인 대화상자나 질문을 띄우고 기다리는 중입니다. 목록 맨 위에 테두리를 강조해서 올립니다. |
+| **작업&nbsp;중** | Claude가 도구를 쓰거나 답을 쓰는 중입니다. 상단에 "N 작업 중" 요약이 붙습니다. |
 | **대기** | 입력을 기다리는 중입니다. |
-| **확인 불가** | 에이전트가 없거나 상태를 읽지 못했습니다. |
+| **확인&nbsp;불가** | 에이전트가 없거나 상태를 읽지 못했습니다. |
 
 오른쪽 위 메뉴에는 **이 기기 로그아웃**, **모든 기기 로그아웃**, **로그인 기록**(최근 20건의 시각, 성공 여부, 기기 종류)이 있습니다. 다크 모드는 폰 설정을 따릅니다.
 
