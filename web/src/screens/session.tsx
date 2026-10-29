@@ -1,8 +1,10 @@
 import type { JSX } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { Session } from "#shared/domain";
+import type { Session, SessionId } from "#shared/domain";
 import { ERROR_INFO } from "#shared/errors";
+import { fileName, viewableType } from "#shared/files";
 import { KEY_PRESETS } from "#shared/keys";
+import { fileUrl } from "../api.ts";
 import { useNow } from "../clock.ts";
 import { goBack } from "../router.ts";
 import { dispatch, loadBlocked, loadOlder, openChat, pendingLabel, sendKeys, sendPrompt, state } from "../store.ts";
@@ -235,7 +237,7 @@ export function MessageList(props: { session: Session; bubbles: Bubble[]; pendin
           ) : b.kind === "assistant" ? (
             <AssistantBubble key={b.event.uuid} text={b.event.text} />
           ) : (
-            <ToolGroup key={b.key} bubble={b} />
+            <ToolGroup key={b.key} sessionId={session.id} bubble={b} />
           ),
         )}
         {pending.map((p) => {
@@ -264,14 +266,25 @@ export function AssistantBubble(props: { text: string }): JSX.Element {
   return <div class="bubble bubble--assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-export function ToolGroup(props: { bubble: Extract<Bubble, { kind: "tools" }> }): JSX.Element {
-  const { bubble } = props;
+/** Files the run wrote that a browser can show (shared/files.ts) are linked under the chip, visible without expanding it. */
+export function ToolGroup(props: { sessionId: SessionId; bubble: Extract<Bubble, { kind: "tools" }> }): JSX.Element {
+  const { sessionId, bubble } = props;
   const [open, setOpen] = useState(false);
+  const files = [...new Set(bubble.items.flatMap(({ use }) => (use.path && viewableType(use.path) ? [use.path] : [])))];
   return (
     <div class="tools">
       <button class="chip" type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
         {bubble.counts}
       </button>
+      {files.length > 0 && (
+        <div class="tools__files">
+          {files.map((path) => (
+            <a class="tools__file" key={path} href={fileUrl(sessionId, path)} target="_blank" rel="noopener noreferrer" title={path}>
+              {fileName(path)}
+            </a>
+          ))}
+        </div>
+      )}
       {open && (
         <ul class="tools__list">
           {bubble.items.map(({ use, result }) => (
@@ -295,10 +308,21 @@ export function BlockedCard(props: { session: Session; state: BlockedState | und
   const { session, state: blocked } = props;
   const current = blocked !== undefined && blocked.forSeq === session.stateChangeSeq ? blocked : undefined;
   const answer = (key: string) => sendKeys(session.id, [key], { dialogId: current!.dialog.dialogId });
+  const text = useRef<HTMLPreElement>(null);
+  // The dialog is the bottom of the screen text, so the box opens scrolled to its end (measured on console-test).
+  useEffect(() => {
+    if (text.current) text.current.scrollTop = text.current.scrollHeight;
+  }, [current?.dialog.dialogId]);
   return (
     <section class="approval" aria-label="승인 요청">
       <div class="approval__head">승인 필요</div>
-      {current ? <pre class="approval__text">{current.dialog.text}</pre> : <p class="approval__note">승인 화면을 읽는 중입니다.</p>}
+      {current ? (
+        <pre class="approval__text" ref={text}>
+          {current.dialog.text}
+        </pre>
+      ) : (
+        <p class="approval__note">승인 화면을 읽는 중입니다.</p>
+      )}
       {current && !current.answered && current.dialog.options.length > 0 && (
         <div class="approval__options approval__options--list">
           {current.dialog.options.map((o) => (
