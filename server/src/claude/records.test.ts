@@ -57,6 +57,15 @@ const cases: [name: string, input: string, expected: ChatEvent[]][] = [
   ["a summary is cut to 120 chars", use("Bash", { command: "y".repeat(300) }), [toolUse("Bash", `Bash: ${"y".repeat(114)}`)]],
   ["a sidechain record is dropped", line("user", "subagent prompt", { isSidechain: true }), []],
   ["a meta record is dropped", line("user", "skill body", { isMeta: true }), []],
+  [
+    "a compact summary is dropped (Claude Code marks it isCompactSummary + isVisibleInTranscriptOnly, not isMeta)",
+    line("user", "This session is being continued from a previous conversation that ran out of context. The summary below covers…", {
+      isCompactSummary: true,
+      isVisibleInTranscriptOnly: true,
+    }),
+    [],
+  ],
+  ["a transcript-only record is dropped", line("user", "shown only in the transcript view", { isVisibleInTranscriptOnly: true }), []],
   ["a slash command shows as /name", line("user", "<command-name>/effort</command-name>\n<command-message>effort</command-message>\n<command-args></command-args>"), [userText("/effort")]],
   ["a slash command keeps its arguments", line("user", "<command-name>/model</command-name><command-message>model</command-message><command-args>opus</command-args>"), [userText("/model opus")]],
   ["a slash command led by command-message", line("user", "<command-message>review</command-message>\n<command-name>/review</command-name>"), [userText("/review")]],
