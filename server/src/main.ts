@@ -1,13 +1,14 @@
 import { createAuth } from "#auth";
-import { createCommandCatalog, createTranscripts } from "#claude";
+import { createClaudeProcesses, createCommandCatalog, createTranscripts } from "#claude";
 import { openConfig, PATHS, readFlags } from "#config";
+import { createHcSource } from "#hc";
 import { createHerdrSource } from "#herdr";
 import { createHttpServer } from "#http";
 import { createHub } from "#hub";
 import { createSessionRegistry } from "#sessions";
 import type { SessionSource, SourceTable } from "#source";
 
-// Composition root. Adding cmux is one entry in `sources`; nothing else in the server or web changes.
+// Composition root. A session source is one entry in `sources`; nothing else in the server or web changes.
 const configFile = openConfig();
 const config = configFile.read();
 if (!config) {
@@ -21,10 +22,12 @@ const transcripts = createTranscripts(PATHS.claudeProjects);
 const commands = createCommandCatalog(PATHS.claudeDir);
 const sources: SourceTable = {
   herdr: createHerdrSource({ herdrBin: config.herdrBin, callTimeoutMs: 3000, relistMs: 60_000 }),
+  hc: createHcSource({ hcBin: PATHS.hcBin, socketPath: PATHS.hcSocket, callTimeoutMs: 3000, inputTimeoutMs: 15_000 }),
 };
 const registry = createSessionRegistry({
   sources: Object.values(sources).filter((s): s is SessionSource => s !== undefined),
   transcripts,
+  processes: createClaudeProcesses(PATHS.claudeSessions),
   intervalMs: 1500,
 });
 const hub = createHub({ registry, transcripts, sources, auth });

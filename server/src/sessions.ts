@@ -1,5 +1,5 @@
 import type { Session, SessionId, SessionList } from "#shared/domain";
-import type { Transcripts } from "#claude";
+import type { ClaudeProcesses, Transcripts } from "#claude";
 import type { SessionSource } from "#source";
 
 export interface SessionsDiff {
@@ -24,6 +24,8 @@ export interface SessionRegistry {
 export function createSessionRegistry(deps: {
   sources: readonly SessionSource[];
   transcripts: Pick<Transcripts, "locate">;
+  /** Resolves a Claude session id for a row whose source knows only the agent's pid (hc). */
+  processes: Pick<ClaudeProcesses, "sessionIdOf">;
   intervalMs: number;
 }): SessionRegistry {
   let list: SessionList = { groups: [], sessions: [] };
@@ -43,7 +45,10 @@ export function createSessionRegistry(deps: {
       const sessions = await Promise.all(
         polls
           .flatMap((p) => p.sessions)
-          .map(async (r): Promise<Session> => ({ ...r, transcriptPath: r.claudeSessionId ? await deps.transcripts.locate(r.claudeSessionId) : null })),
+          .map(async ({ agentPid, ...r }): Promise<Session> => {
+            const claudeSessionId = r.claudeSessionId ?? (agentPid === undefined ? null : await deps.processes.sessionIdOf(agentPid));
+            return { ...r, claudeSessionId, transcriptPath: claudeSessionId ? await deps.transcripts.locate(claudeSessionId) : null };
+          }),
       );
       const diff = diffSessions(byId, sessions);
       const groupsMoved = JSON.stringify(groups) !== JSON.stringify(list.groups);

@@ -62,7 +62,7 @@ export function SessionsScreen(props: { groups: GroupView[]; loading: boolean })
   );
 }
 
-/** Label "herdr · default"; "응답 없음" when the group is unreachable; an empty group says it has no panes. */
+/** Label from GROUP_LABEL ("herdr · default", "Herdr 앱"); "응답 없음" when the group is unreachable; an empty group says it has no panes. */
 export function SessionGroupView(props: { view: GroupView }): JSX.Element {
   const { view } = props;
   const since = state.value.statusSince;

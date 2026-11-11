@@ -1,0 +1,44 @@
+{
+  "hidden_finished": 2,
+  "machines": [],
+  "terminals": [
+    {
+      "address": "t1c", "argv": ["/bin/zsh", "-li"], "cols": 166, "rows": 43, "created_ms": 1793862817428,
+      "cwd": "/Users/me/dev/shop-api", "state": "live", "pid": 26783, "exit_code": null, "finished_ms": null,
+      "foreground": { "argv": ["/bin/zsh", "-li"], "cwd": "/Users/me/dev/shop-api", "name": "zsh", "pid": 26783 },
+      "labels": { "herdr.seen": "2", "herdr.space": "sp567f", "herdr.tab": "tb1a9c", "where": "shop-api / Map" },
+      "name": null, "parent": null, "status": null, "status_ms": 1793949146680, "title": "me@mac:~/dev/shop-api", "turn": 2
+    },
+    {
+      "address": "t1n", "argv": ["/bin/zsh", "-l"], "cols": 166, "rows": 43, "created_ms": 1793951071863,
+      "cwd": "/Users/me/.herdr/worktrees/shop-api/payments", "state": "live", "pid": 67949, "exit_code": null, "finished_ms": null,
+      "foreground": { "argv": ["claude", "--resume", "a8dd827a-f079-40b6-bac8-f8b606a132ed"], "cwd": "/Users/me/.herdr/worktrees/shop-api/payments", "name": "2.1.319", "pid": 78509 },
+      "labels": { "herdr.seen": "32", "herdr.space": "spad28", "herdr.tab": "tb61f4", "where": "payments / 1" },
+      "name": null, "parent": null,
+      "status": { "app": "claude-code", "msg": "Rewriting the retry policy", "state": "working" },
+      "status_ms": 1794309199210, "title": "결제 재시도 정책", "turn": 32
+    },
+    {
+      "address": "t1p", "argv": ["/bin/zsh", "-l"], "cols": 120, "rows": 40, "created_ms": 1793951071900,
+      "cwd": "/Users/me/.herdr/worktrees/shop-api/review-1", "state": "live", "pid": 25100, "exit_code": null, "finished_ms": null,
+      "foreground": { "argv": ["claude"], "cwd": "/Users/me/.herdr/worktrees/shop-api/review-1", "name": "2.1.322", "pid": 25111 },
+      "labels": { "herdr.seen": "16", "herdr.space": "spb28c", "herdr.tab": "tb766a" },
+      "name": null, "parent": null,
+      "status": { "app": "claude-code", "state": "blocked", "kind": "permission", "msg": "Bash" },
+      "status_ms": 1794300000000, "title": "", "turn": 16
+    },
+    {
+      "address": "t30", "argv": ["/bin/zsh", "-l"], "cols": 200, "rows": 120, "created_ms": 1793951072000,
+      "cwd": "/Users/me/dev/shop-api", "state": "live", "pid": 40000, "exit_code": null, "finished_ms": null,
+      "foreground": { "argv": ["claude"], "cwd": "/Users/me/dev/shop-api", "name": "2.1.322", "pid": 40001 },
+      "labels": { "console.test": "1" },
+      "name": null, "parent": "t1n", "status": { "app": "claude-code", "state": "idle" }, "status_ms": 1, "title": "helper", "turn": 1
+    },
+    {
+      "address": "t20", "argv": ["/bin/zsh", "-l"], "cols": 200, "rows": 120, "created_ms": 1793860340747,
+      "cwd": "/Users/me/dev/shop-api", "state": "finished", "pid": 65125, "exit_code": 1, "finished_ms": 1794289331253,
+      "foreground": null, "labels": { "herdr.space": "spa23a", "herdr.tab": "tb1273", "where": "shop-api / 1" },
+      "name": null, "parent": null, "status": null, "status_ms": 1794289331252, "title": "old", "turn": 12
+    }
+  ]
+}

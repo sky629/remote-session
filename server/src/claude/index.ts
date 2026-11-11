@@ -10,6 +10,8 @@ import { lineToEvents, mayBeChatLine } from "./records.ts";
 export { blockedDialog, dialogId } from "./blocked.ts";
 export { createCommandCatalog } from "./commands.ts";
 export type { CommandCatalog } from "./commands.ts";
+export { createClaudeProcesses } from "./processes.ts";
+export type { ClaudeProcesses } from "./processes.ts";
 
 /**
  * Claude transcripts on this Mac, keyed by Claude session id. One window per file serves both paging and

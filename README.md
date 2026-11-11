@@ -22,7 +22,7 @@
 
 ## 어떻게 동작하나
 
-Mac에서 Claude Code 세션들은 [herdr](https://herdr.dev) 안에서 돌아갑니다. 이 콘솔은 herdr의 소켓 API로 세션 목록과 상태를 읽고, 메시지와 키 입력을 전달합니다. 대화 내용은 Claude Code가 남기는 transcript 파일에서 읽습니다. 폰은 Tailscale 테일넷 안에서만 접속할 수 있고, 들어온 뒤에도 암호를 맞혀야 화면을 볼 수 있습니다.
+Mac에서 Claude Code 세션들은 [herdr](https://herdr.dev) 안에서 돌아갑니다. 터미널용 `herdr server`와 Herdr 앱(그 뒤에서 터미널을 들고 있는 herdr-core) 둘 다 지원합니다. 이 콘솔은 각각의 소켓 API로 세션 목록과 상태를 읽고, 메시지와 키 입력을 전달합니다. 대화 내용은 Claude Code가 남기는 transcript 파일에서 읽습니다. 폰은 Tailscale 테일넷 안에서만 접속할 수 있고, 들어온 뒤에도 암호를 맞혀야 화면을 볼 수 있습니다.
 
 ```mermaid
 flowchart TB
@@ -30,9 +30,11 @@ flowchart TB
   subgraph mac["Mac"]
     serve["Tailscale Serve<br/>신원 헤더를 붙임"] -->|"127.0.0.1:7420"| srv["세션 콘솔 서버<br/>Node 24 + ws"]
     srv -->|"소켓 API: 목록, prompt, 키 입력"| herdr["herdr server"]
+    srv -->|"JSON-RPC: 목록, send, keys"| hc["herdr-core<br/>(Herdr 앱)"]
     srv -.->|"읽기만"| tr["~/.claude/projects/*.jsonl<br/>대화 기록"]
     herdr --> c1["Claude Code 세션"]
     herdr --> c2["Claude Code 세션"]
+    hc --> c3["Claude Code 세션"]
   end
 ```
 
@@ -130,7 +132,7 @@ Claude가 작업 중에 HTML 보고서나 그림을 만들면, 대화 탭의 링
 
 ### 준비물
 
-- macOS에서 `herdr server`가 돌아가고 그 안에 Claude Code 세션이 있어야 합니다. herdr 0.9 계열에서 확인했습니다.
+- macOS에서 `herdr server`나 Herdr 앱이 돌아가고 그 안에 Claude Code 세션이 있어야 합니다. herdr 0.9 계열과 herdr-core 0.1 계열에서 확인했습니다. 둘 다 있으면 둘 다 보이고, 없는 쪽은 목록에 나타나지 않습니다.
 - Node 24.18 이상, pnpm 11.
 - Tailscale. 관리 콘솔에서 **MagicDNS**와 **HTTPS Certificates**를 켜 둡니다. Mac과 아이폰이 같은 테일넷에 있어야 합니다.
 
@@ -218,7 +220,7 @@ CONSOLE_SERVER=127.0.0.1:7421 pnpm exec vite web
 ## 구조
 
 ```
-server/   Node 서버: 인증, herdr 어댑터, transcript 읽기, HTTP와 WebSocket
+server/   Node 서버: 인증, herdr 어댑터(src/herdr), herdr-core 어댑터(src/hc), transcript 읽기, HTTP와 WebSocket
 web/      Preact + Vite 폰 UI, xterm.js 터미널, web/mock 목업 서버
 shared/   서버와 웹이 함께 쓰는 타입, 프로토콜, 오류표, 키 목록
 docs/     설계 문서(docs/superpowers/specs)와 화면 캡처
@@ -228,7 +230,8 @@ docs/     설계 문서(docs/superpowers/specs)와 화면 캡처
 
 ## 알아 둘 것
 
-- herdr 안의 Claude Code 세션만 보입니다. cmux가 직접 띄운 세션은 1차 범위 밖입니다.
+- herdr 안의 Claude Code 세션만 보입니다. `herdr server`의 세션은 herdr 세션 이름별로, Herdr 앱의 세션은 "Herdr 앱" 묶음으로 나옵니다. cmux가 직접 띄운 세션은 범위 밖입니다.
+- Herdr 앱 세션의 터미널 탭에서 글자 입력란은 영문, 숫자, 띄어쓰기만 보낼 수 있습니다. herdr-core가 입력을 키 이름으로만 받기 때문입니다. 한글과 기호는 대화 탭에서 메시지로 보내면 됩니다.
 - 소유자 한 명을 위한 도구입니다. 계정이나 권한 구분은 없습니다.
 - 서버는 전경에서 실행합니다. launchd 등록은 아직 없습니다.
 - 폰에서 암호를 바꾸는 화면은 없습니다. Mac에서 `pnpm passphrase`를 다시 실행합니다.

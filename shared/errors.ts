@@ -9,6 +9,7 @@ export const ERROR_INFO = {
   agent_not_ready: { http: 409, retry: "never", phone: "Claude가 아직 입력을 받을 준비가 되지 않았습니다. 잠시 뒤에 다시 보내세요." },
   delivery_unconfirmed: { http: 504, retry: "never", phone: "전달되었는지 확인하지 못했습니다. Mac 화면을 확인한 뒤에 다시 보내세요." },
   pane_closed: { http: 410, retry: "never", phone: "세션이 닫혔습니다." },
+  raw_text_unsupported: { http: 422, retry: "never", phone: "Herdr 앱 세션에는 영문, 숫자, 띄어쓰기만 글자로 보낼 수 있습니다. 한글과 기호는 메시지로 보내세요." },
   source_unreachable: { http: 503, retry: "auto", phone: "herdr에 연결할 수 없습니다. 연결되면 자동으로 복구됩니다." },
   source_error: { http: 502, retry: "never", phone: "herdr가 요청을 거부했습니다. Mac 화면을 확인하세요." },
   stale_dialog: { http: 409, retry: "refresh", phone: "승인 화면이 바뀌어서 선택을 보내지 않았습니다. 화면을 다시 확인하세요." },

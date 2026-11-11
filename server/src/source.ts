@@ -2,8 +2,12 @@ import type { Liveness, Session, SessionFacts, SessionGroup, SourceKind, Termina
 import type { Result } from "#shared/errors";
 import type { InputCommand, TerminalState } from "#shared/protocol";
 
-/** A row as a source reports it. The registry adds transcriptPath: transcripts are Claude knowledge, not source knowledge. */
-export type SourceSession = SessionFacts & Liveness;
+/**
+ * A row as a source reports it. The registry adds transcriptPath: transcripts are Claude knowledge, not source
+ * knowledge. `agentPid` is the agent's process id when the source knows it (hc does, herdr does not); a row with no
+ * claudeSessionId gets one from the registry through that pid, and the pid itself never reaches the phone.
+ */
+export type SourceSession = SessionFacts & Liveness & { agentPid?: number };
 
 export interface SourcePoll {
   groups: SessionGroup[];

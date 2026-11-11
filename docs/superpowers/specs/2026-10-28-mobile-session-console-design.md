@@ -102,6 +102,17 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 - Node v24.18.0. `process.features.typescript`가 `strip`이므로 백엔드 TypeScript를 빌드 없이 바로 실행할 수 있다.
 - pnpm 설치됨. 저장소는 `/Users/kang/Documents/dev/remote-session`(이 문서를 쓰면서 `git init` 함).
 
+### 4.7 Herdr 앱과 herdr-core (2026-11-10 추가, 모두 실제 실행으로 확인)
+
+- 사용자는 터미널용 `herdr server` 외에 Herdr 앱(`/Applications/Herdr.app`)도 쓴다. 앱은 별도 프로그램이고, 터미널은 앱이 아니라 `herdr-core`(`hc`, 0.1.19, `~/.local/bin/hc`)가 들고 있다. 앱이 꺼져도 터미널은 살아 있다. 확인 당시 앱에는 space 9개, Claude Code 터미널 8개가 있었다.
+- herdr-core 소켓은 `~/.local/state/herdr-core/default/default.sock`이다(환경 변수 `HC_SOCKET`로 바꿀 수 있다). 전송은 JSON-RPC 2.0, 줄 단위 JSON, 요청 하나에 연결 하나다. 오류는 `error.data.kind`에 안정된 이름이 온다(`blocked`, `not_found`, `finished`, `unavailable`, `invalid_params`). 전체 스키마는 `hc schema`로 뽑는다.
+- 앱 자체 소켓(`~/.config/herdr-app/herdr-app.sock`)은 `{ls}`, `{status}`, `{commands}`, `{do}`만 받는 창 제어용이라 쓰지 않는다. 터미널 목록, 입력, 화면은 모두 herdr-core에서 얻는다.
+- `terminal.list`는 터미널마다 `address`(`t1n`), `cwd`, `cols`/`rows`, `title`, `labels`, `status`, `status_ms`, `foreground`(`pid`, `argv`, `cwd`)를 준다. 앱이 보여 주는 터미널에는 `herdr.space`, `herdr.tab`, `where`(`"<space> / <tab>"`) 라벨이 있고, 라벨이 없는 터미널은 앱 화면에 나오지 않는다(앱 AGENTS.md). `status`는 OSC 7501 보고로 `app`(`"claude-code"`)과 `state`(idle, working, blocked, done, error)를 담는다. herdr의 `agent_session` 같은 Claude 세션 id는 없다.
+- Claude 세션 id는 Claude Code가 직접 쓰는 `~/.claude/sessions/<pid>.json`(`{pid, sessionId, cwd, startedAt, ...}`, Claude Code 2.1.319와 2.1.322에서 확인)에서 foreground pid로 찾는다. 4.4절의 "cwd로 계산하지 않는다"는 그대로 지킨다.
+- `terminal.read {terminal, lines: 0}`은 화면 텍스트를 준다. `terminal.send {terminal, text}`는 붙여넣기 뒤 Enter를 누르고(약 0.5초 걸림), `blocked`면 거부한다. `terminal.keys {terminal, keys}`는 키 이름만 받는다. 인쇄 가능한 ASCII 한 글자, `space`, `shift+a`, `enter`, `esc`, `backspace`, `ctrl+u`, `up`, `down`, `tab`은 되고, 한글과 `?`, `!` 같은 글자, 두 글자 이상 문자열은 `invalid_params`로 거부된다. 거부는 0ms에 돌아오므로 아무것도 입력되지 않는다. Enter 없이 글을 넣는 메서드는 없다.
+- `hc attach --observe <t>`를 파이프로 받으면 터미널의 원시 바이트가 온다. 처음에 전체 다시 그리기(소프트 리셋, 지우기, 화면)가 오고 이후에는 실시간 출력이 온다. `--observe`는 입력도 크기 변경도 하지 않는다. 터미널이 끝나면 stderr에 `[t25 finished: killed]`를 쓰고 종료 코드 0으로 끝난다.
+- 입력과 스트림 확인은 라벨 없는 임시 터미널(`/bin/cat`)에서 했고, 끝난 뒤 `terminal.kill`과 `terminal.rm`으로 지웠다. 사용자의 실제 세션에는 읽기만 했다.
+
 ## 5. 결정
 
 ### 5.1 사용자가 정한 것
@@ -114,6 +125,7 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 ### 5.1.1 승인 시점에 기본값으로 진행한 것 (사용자가 바꿀 수 있다)
 
 - **cmux 세션 범위는 C다.** 1차는 herdr 세션만 보여 준다. 다만 `Session`에 `source` 필드(`"herdr"` 또는 `"cmux"`)를 지금 넣어서, 2차에 cmux 어댑터를 붙일 때 UI를 바꾸지 않게 한다. 지금 Mac의 Claude Code 세션은 전부 herdr 안에 있고 cmux가 자체 등록한 Claude 세션은 없다.
+- **(2026-11-10) Herdr 앱 세션도 보여 준다.** 사용자가 Herdr 앱도 쓰고 있어서 요청했다. `source`에 `"hc"`(herdr-core)를 더했고, 어댑터는 `server/src/hc/`, 그룹은 이 Mac의 코어 하나(`local`), 화면의 묶음 이름은 "Herdr 앱"이다. 4.7절과 5.2절의 두 행을 보라.
 - **검증용 시험 세션을 만든다.** 12.1절 절차대로 `console-test` 워크스페이스를 만들어 쓰고 지운다.
 
 ### 5.2 작성자(Claude)가 정한 것. 사용자가 바꿀 수 있다.
@@ -121,12 +133,14 @@ cmux가 같은 기능을 iOS 앱으로 제공하지만 유료(Founders Edition)�
 | 항목 | 결정 | 이유 |
 | --- | --- | --- |
 | 연결 지점 | herdr 소켓 API | Claude 프로세스를 소유한 층이다. 문서화된 API와 상태 인식이 있다. cmux 소켓은 외부 접근이 잠겨 있고 설정 변경이 필요하다. |
-| 상태 갱신 방식 | `session.snapshot`을 클라이언트가 붙어 있는 동안만 1.5초 간격으로 폴링. 이벤트 구독은 쓰지 않는다. | 스냅샷은 12KB 수준이고 구독은 pane마다 따로 열어야 한다. 사용자 한 명의 폰 UI에는 폴링이 더 단순하고 충분하다. 지연이 문제로 확인되면 그때 pane별 `pane.agent_status_changed` 구독을 더한다. |
+| Herdr 앱 연결 지점 | herdr-core(`hc`) 소켓의 JSON-RPC. 앱 자체 소켓은 쓰지 않는다. 소켓 파일이 없으면 그룹 자체를 내지 않고, 있는데 응답이 없으면 "응답 없음" 그룹으로 보여 준다. | 터미널과 에이전트 상태를 들고 있는 층이 herdr-core다. 앱 소켓은 창 제어용이고, 앱을 꺼도 터미널은 herdr-core에 남는다(4.7절). 소켓 파일이 없다는 것은 앱을 쓰지 않는 Mac이라는 뜻이다. |
+| 상태 갱신 방식 | `session.snapshot`을 클라이언트가 붙어 있는 동안만 1.5초 간격으로 폴링. 이벤트 구독은 쓰지 않는다. herdr-core도 같은 간격으로 `terminal.list`를 폴링한다. | 스냅샷은 12KB 수준이고 구독은 pane마다 따로 열어야 한다. 사용자 한 명의 폰 UI에는 폴링이 더 단순하고 충분하다. 지연이 문제로 확인되면 그때 pane별 `pane.agent_status_changed` 구독을 더한다. |
 | 대화 데이터 | transcript 파일을 직접 읽는다 | Claude Code가 쓰는 원본이다. `agent.read`는 화면 텍스트라서 대화 구조가 없다. |
 | 대화 갱신 | `fs.watch`로 파일 변경을 감지하고 추가된 바이트만 파싱 | 280MB 파일을 다시 읽지 않기 위해서다. |
 | 입력 전달 | 메시지는 `agent.prompt`, 키는 `agent.send_keys`. 예외는 터미널 탭의 글자 입력란 하나뿐이고, 그것만 `pane.send_text`(Enter를 붙이지 않는 저수준 쓰기)를 쓴다. | herdr가 bracketed paste와 Enter를 한 번에 처리하고, `blocked` 상태면 `agent_blocked`로 거부해 준다. 대화 화면은 절대 터미널에 직접 쓰지 않는다. 터미널 탭은 정의상 날것의 화면이므로, 승인 대화상자의 "다르게 하라고 알려주기" 같은 글자 입력을 여기서만 허용한다. |
 | 승인 응답 | `agent.read --source detection` 텍스트에서 번호 선택지를 뽑아 버튼으로 보여 주고, 누르면 그 숫자 키를 `agent.send_keys`로 보낸다. 선택지를 못 뽑으면 원문 텍스트와 범용 키(Enter, Esc, y, n)를 보여 주고, 번호 선택이 필요하면 터미널 탭의 ↑ ↓ Enter로 고른다. | Claude Code 승인 대화상자는 숫자 키로 선택된다. 인식 실패를 숨기지 않기 위해 원문을 항상 함께 보여 준다. |
 | 터미널 탭 | `herdr terminal session observe`를 **pane의 실제 크기**로 열고, 프레임을 WebSocket으로 그대로 전달한다. 폰에서 xterm.js를 같은 크기(예: 155×54)로 만들고, 기본은 폰 폭에 맞춰 축소(CSS transform scale)해서 전체를 보여 주며, 토글로 원래 크기 + 가로 스크롤로 바꾼다. | 관찰자는 요청한 크기로 화면을 자르기만 하므로(4.2절), 폰 크기로 열면 프롬프트 줄이 잘려 나간다. 읽기 전용 관찰자라 Mac 화면에 영향이 없다. 키는 `agent.send_keys`, 글자는 입력란에서 `pane.send_text`로 보낸다. |
+| Herdr 앱 입력과 화면 | 메시지는 `terminal.send`, 키는 `terminal.keys`, 승인 대화상자 읽기는 `terminal.read`(화면 텍스트), 화면 스트림은 `hc attach --observe`의 원시 바이트를 조각마다 한 프레임으로 보낸다(첫 조각만 `full`, 크기는 `terminal.list`의 `cols`/`rows`). 터미널 탭의 글자 입력란은 글자마다 키 이름으로 보내고(`space`, `shift+a`), 키 이름이 없는 글자(한글, 일부 기호)는 `raw_text_unsupported`로 거부한다. Claude 세션 id는 어댑터가 foreground pid를 `agentPid`로 넘기고 레지스트리가 `~/.claude/sessions/<pid>.json`에서 찾는다. pid는 폰으로 가지 않는다. | herdr-core에는 Enter 없이 글을 넣는 메서드가 없고, framed attach 스트림은 문서가 없다(4.7절). 키 이름 검사는 입력 전에 한 번에 끝나므로 반쯤 입력되는 일이 없다. pid 파일은 Claude Code가 직접 쓰는 사실이라 cwd 추정보다 정확하고, transcript 위치가 Claude 지식이듯 세션 id도 레지스트리가 채운다. |
 | 인증 1차 관문 | 서버는 127.0.0.1에만 바인드한다. 모든 요청에서 `Tailscale-User-Login` 헤더가 설정 파일의 소유자 로그인(`kkt629@gmail.com`)과 같은지 검사한다. 아니면 403. | Serve를 거치지 않은 요청은 헤더가 없어서 거부된다. 로컬에서 직접 붙는 요청도 헤더가 없으므로 개발 시에는 환경 변수로 이 관문만 끈다. |
 | 인증 2차 관문 (로그인) | 암호(passphrase) 하나를 서버 설정에 scrypt 해시로 저장한다. 로그인 화면에서 암호를 맞히면 서버가 무작위 세션 토큰을 만들어 `HttpOnly; Secure; SameSite=Strict` 쿠키로 준다. 유효 기간은 30일이고, 서버가 토큰 목록을 파일에 저장해서 재시작해도 유지된다. 로그아웃은 그 토큰을 지운다. 실패는 IP당 분당 5회로 제한한다. | 사용자 요구다. 폰을 잃어버리거나 테일넷에 다른 기기가 들어와도 암호 없이는 세션을 볼 수 없다. WebAuthn(Face ID)은 더 좋지만 구현량이 커서 후속으로 미룬다. |
 | 암호 설정 | `pnpm passphrase`가 터미널에서 암호를 두 번 받아(8자 이상, 12자 이상 권장) 해시를 설정 파일(`~/.config/session-console/config.json`, 권한 600)에 쓴다. 평문 암호는 어디에도 저장하지 않는다. 다시 실행해 암호를 바꾸면 모든 로그인 토큰이 무효가 된다. scrypt는 `maxmem` 64MiB로 호출한다(Node 24 기본값 32MiB에서는 N=2^15, r=8이 `ERR_CRYPTO_INVALID_SCRYPT_PARAMS`로 실패함, 실측). | 서버를 처음 켜기 전에 한 번만 하면 된다. 스크립트 이름을 `setup`으로 두지 않는 이유는 `pnpm setup`이 pnpm 11.5.2의 내장 명령이라 스크립트가 실행되지 않기 때문이다(실측). 폰에서 암호를 바꾸는 화면은 만들지 않는다. |
@@ -148,8 +162,8 @@ type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 
 interface Session {
   id: string;                 // `${source}:${group}/${paneId}`  예: "herdr:default/w11:p1"
-  source: "herdr" | "cmux";   // 1차는 "herdr"만 만든다. 2차 cmux 어댑터용 자리.
-  group: string;              // 소스 안의 묶음 이름. herdr에서는 herdr 세션 이름("default", "rocket"). (처음 이름 herdrSession에서 바꿈)
+  source: "herdr" | "hc" | "cmux";   // herdr: herdr server. hc: herdr-core(Herdr 앱, 2026-11-10 추가). cmux: 자리만.
+  group: string;              // 소스 안의 묶음 이름. herdr에서는 herdr 세션 이름("default", "rocket"), hc에서는 기계 이름("local"). (처음 이름 herdrSession에서 바꿈)
   reachable: boolean;         // 그 그룹의 소켓이 살아 있는가. false이면 status는 반드시 "unknown"이다(타입으로 강제).
   paneId: string;             // "w11:p1"
   terminalId: string;         // "term_65eb9535b347f6"
@@ -158,7 +172,7 @@ interface Session {
   cwd: string | null;
   agent: string | null;       // "claude" | "codex" | null
   status: AgentStatus;
-  claudeSessionId: string | null;   // agent_session.value when agent === "claude"
+  claudeSessionId: string | null;   // herdr: agent_session.value. hc: ~/.claude/sessions/<pid>.json의 sessionId (레지스트리가 채운다)
   transcriptPath: string | null;    // 찾은 jsonl 경로
   stateChangeSeq: number;
 }
