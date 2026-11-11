@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { AgentStatus, ChatEvent, Session, SessionGroup, SlashCommand } from "#shared/domain";
+import type { AgentStatus, ChatEvent, Session, SessionGroup, SlashCommand, SourceKind } from "#shared/domain";
 
 /** Spec 6.2 as one table. Sorting, the pill and the composer rule all read it; nothing else lists statuses. */
 export const STATUS_VIEW: Readonly<
@@ -14,9 +14,16 @@ export const STATUS_VIEW: Readonly<
 
 export interface GroupView {
   group: SessionGroup;
-  label: string; // "herdr · default"
+  label: string; // "herdr · default", "Herdr 앱"
   sessions: Session[]; // rank ascending, then stateChangeSeq descending (spec 6.1)
 }
+
+/** The group header per source. herdr names its sessions; the Herdr app has one core per machine, "local" being this Mac. */
+const GROUP_LABEL: Readonly<Record<SourceKind, (name: string) => string>> = {
+  herdr: (name) => `herdr · ${name}`,
+  hc: (name) => (name === "local" ? "Herdr 앱" : `Herdr 앱 · ${name}`),
+  cmux: (name) => `cmux · ${name}`,
+};
 /** One entry per group, empty groups included, in the order the server listed them. */
 export function groupSessions(groups: readonly SessionGroup[], sessions: Iterable<Session>): GroupView[] {
   const rows = new Map<string, Session[]>();
@@ -28,7 +35,7 @@ export function groupSessions(groups: readonly SessionGroup[], sessions: Iterabl
   }
   return groups.map((group) => ({
     group,
-    label: `${group.source} · ${group.name}`,
+    label: GROUP_LABEL[group.source](group.name),
     sessions: (rows.get(`${group.source}:${group.name}`) ?? []).sort(
       (a, b) => STATUS_VIEW[a.status].rank - STATUS_VIEW[b.status].rank || b.stateChangeSeq - a.stateChangeSeq,
     ),

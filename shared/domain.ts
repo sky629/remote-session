@@ -6,7 +6,8 @@
 declare const brand: unique symbol;
 export type Brand<T, B extends string> = T & { readonly [brand]: B };
 
-export const SOURCE_KINDS = ["herdr", "cmux"] as const;
+/** herdr: the terminal multiplexer (`herdr server`). hc: herdr-core, the terminal runtime behind the Herdr app. cmux: reserved. */
+export const SOURCE_KINDS = ["herdr", "hc", "cmux"] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 export type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 
@@ -19,7 +20,7 @@ export type ClaudeSessionId = Brand<string, "ClaudeSessionId">;
 export interface SessionFacts {
   id: SessionId;
   source: SourceKind;
-  /** Group inside the source. For herdr it is the herdr session name ("default", "rocket"). */
+  /** Group inside the source. herdr: the herdr session name ("default", "rocket"). hc: the machine, "local" for this Mac. */
   group: string;
   paneId: string;
   terminalId: string;

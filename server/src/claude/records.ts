@@ -2,7 +2,9 @@ import type { ChatEvent } from "#shared/domain";
 
 /**
  * One transcript line → chat events (spec 4.4, 6.3). Pure, and the only code that knows the record format.
- * Kept records: type "user" | "assistant", isSidechain !== true, isMeta !== true (skill bodies are isMeta; measured).
+ * Kept records: type "user" | "assistant", not isSidechain, and none of the flags Claude Code uses to keep a record out of
+ * its own chat view: isMeta (skill bodies, peer messages), isCompactSummary and isVisibleInTranscriptOnly (the summary it
+ * writes as a user message when it compacts the context). All measured on local transcripts.
  *   user, string content      → USER_WRAPPERS decide: user_text, or dropped
  *   user, text blocks         → user_text (e.g. "[Request interrupted by user]"), through USER_WRAPPERS as well
  *   user, tool_result blocks  → tool_result; preview = first 200 chars of its text parts; isError = is_error === true
@@ -19,7 +21,7 @@ export function lineToEvents(line: string): ChatEvent[] {
   } catch {
     return [];
   }
-  if (!isObject(record) || record.isSidechain === true || record.isMeta === true) return [];
+  if (!isObject(record) || HIDDEN_FLAGS.some((flag) => record[flag] === true)) return [];
   const uuid = str(record.uuid);
   const ts = str(record.timestamp);
   const content = isObject(record.message) ? record.message.content : undefined;
@@ -27,6 +29,8 @@ export function lineToEvents(line: string): ChatEvent[] {
   const pieces = record.type === "user" ? userPieces(content) : record.type === "assistant" ? assistantPieces(content) : [];
   return pieces.map((p, i): ChatEvent => ({ ...p, uuid: i === 0 ? uuid : `${uuid}#${i}`, ts }));
 }
+
+const HIDDEN_FLAGS = ["isSidechain", "isMeta", "isCompactSummary", "isVisibleInTranscriptOnly"] as const;
 
 type Piece = DistributiveOmit<ChatEvent, "uuid" | "ts">;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

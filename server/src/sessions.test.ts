@@ -46,6 +46,7 @@ function fakeSource() {
 }
 
 const located = (id: ClaudeSessionId) => Promise.resolve(id === CID ? "/projects/x/session.jsonl" : null);
+const byPid = (pid: number) => Promise.resolve(pid === 78509 ? CID : null);
 const flush = async () => {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
 };
@@ -55,7 +56,7 @@ afterEach(() => mock.timers.reset());
 
 test("turning on polls at once and then every interval; turning off stops; both are idempotent", async () => {
   const f = fakeSource();
-  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, intervalMs: 1500 });
+  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, processes: { sessionIdOf: byPid }, intervalMs: 1500 });
   reg.setActive(true);
   reg.setActive(true);
   await flush();
@@ -72,7 +73,7 @@ test("turning on polls at once and then every interval; turning off stops; both 
 
 test("a poll in flight when polling turns off still applies its result, and nothing is scheduled after it", async () => {
   const f = fakeSource();
-  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, intervalMs: 1500 });
+  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, processes: { sessionIdOf: byPid }, intervalMs: 1500 });
   const seen: number[] = [];
   reg.subscribe((list) => seen.push(list.sessions.length));
   f.state.hold = true;
@@ -90,7 +91,7 @@ test("a poll in flight when polling turns off still applies its result, and noth
 
 test("off then on during a poll leaves exactly one poll chain", async () => {
   const f = fakeSource();
-  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, intervalMs: 1500 });
+  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, processes: { sessionIdOf: byPid }, intervalMs: 1500 });
   f.state.hold = true;
   reg.setActive(true);
   await flush();
@@ -114,7 +115,7 @@ test("off then on during a poll leaves exactly one poll chain", async () => {
 
 test("list() polls only when the last poll is older than the interval, and concurrent callers share one poll", async () => {
   const f = fakeSource();
-  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, intervalMs: 1500 });
+  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, processes: { sessionIdOf: byPid }, intervalMs: 1500 });
   const [a, b] = await Promise.all([reg.list(), reg.list()]);
   assert.equal(f.state.polls, 1);
   assert.equal(a, b);
@@ -127,7 +128,7 @@ test("list() polls only when the last poll is older than the interval, and concu
 
 test("listeners hear only polls that changed rows or groups, and Claude rows get their transcript path", async () => {
   const f = fakeSource();
-  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, intervalMs: 1500 });
+  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, processes: { sessionIdOf: byPid }, intervalMs: 1500 });
   const diffs: unknown[] = [];
   reg.subscribe((_, diff) => diffs.push(diff));
   const poll = async () => {
@@ -145,6 +146,23 @@ test("listeners hear only polls that changed rows or groups, and Claude rows get
   f.state.groups = [...GROUPS, { source: "herdr", name: "rocket", reachable: true }];
   await poll();
   assert.deepEqual(diffs.at(-1), { added: [], removed: [], changed: [] }, "a group change alone is heard");
+});
+
+test("a row that names only the agent's pid gets its Claude session id and transcript from the pid, and the pid stays on the server", async () => {
+  const f = fakeSource();
+  f.state.rows = [row("w1:p1", { agent: "claude", agentPid: 78509 }), row("w2:p1", { agent: "claude", agentPid: 1 }), row("w3:p1", { agent: "claude", claudeSessionId: CID, agentPid: 1 })];
+  const reg = createSessionRegistry({ sources: [f.source], transcripts: { locate: located }, processes: { sessionIdOf: byPid }, intervalMs: 1500 });
+  const { sessions } = await reg.list();
+  assert.deepEqual(
+    sessions.map((s) => [s.claudeSessionId, s.transcriptPath]),
+    [
+      [CID, "/projects/x/session.jsonl"],
+      [null, null],
+      [CID, "/projects/x/session.jsonl"],
+    ],
+    "an id the source knows is not looked up again",
+  );
+  assert.ok(sessions.every((s) => !("agentPid" in s)));
 });
 
 test("diffSessions compares every field", () => {

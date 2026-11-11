@@ -7,6 +7,11 @@ test("a session id round-trips through the URL form", () => {
   assert.deepEqual(parseSessionId(id), { id, source: "herdr", group: "default", paneId: "w11:p1" });
 });
 
+test("an hc session id names the machine as its group", () => {
+  const id = makeSessionId("hc", "local", "t1n");
+  assert.deepEqual(parseSessionId(id), { id, source: "hc", group: "local", paneId: "t1n" });
+});
+
 test("ids from outside are rejected unless they have the exact shape", () => {
   for (const raw of ["", "herdr:default", "tmux:default/w1:p1", "herdr:a/b/c", "herdr:/w1:p1"]) {
     assert.equal(parseSessionId(raw), null, raw);

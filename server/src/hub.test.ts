@@ -102,7 +102,7 @@ function setup() {
       return () => {};
     },
   };
-  const registry = createSessionRegistry({ sources: [source], transcripts, intervalMs: 60_000 });
+  const registry = createSessionRegistry({ sources: [source], transcripts, processes: { sessionIdOf: async () => null }, intervalMs: 60_000 });
   const hub = createHub({ registry, transcripts, sources: { herdr: source }, auth: { isTokenLive: () => live } });
   hubs.push(hub);
   const connect = async () => {

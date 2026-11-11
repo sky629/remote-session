@@ -6,6 +6,10 @@ import { z } from "zod";
 
 const DIR = process.env.SESSION_CONSOLE_DIR || join(homedir(), ".config", "session-console");
 const TAILSCALE_APP = "/Applications/Tailscale.app/Contents/MacOS/Tailscale";
+/** herdr-core's per-user install puts `hc` here (hc --skill); a package-manager install has it on PATH. */
+const HC_LINK = join(homedir(), ".local", "bin", "hc");
+/** herdr-core keeps its state under XDG_STATE_HOME; the socket of the default session is `default/default.sock` (measured on 0.1.19). */
+const HC_SOCKET = join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "herdr-core", "default", "default.sock");
 
 /**
  * Every file under DIR has exactly one writer process; every other process only reads it. So the CLI and the
@@ -21,6 +25,11 @@ export const PATHS = {
   logins: join(DIR, "logins.jsonl"), // writer: server, append-only
   claudeDir: join(homedir(), ".claude"),
   claudeProjects: join(homedir(), ".claude", "projects"),
+  /** Claude Code's own registry of running processes, `<pid>.json` each (see claude/processes.ts). */
+  claudeSessions: join(homedir(), ".claude", "sessions"),
+  /** herdr-core, the terminal runtime behind the Herdr app. The socket's absence means the app is not in use. */
+  hcSocket: process.env.HC_SOCKET || HC_SOCKET,
+  hcBin: existsSync(HC_LINK) ? HC_LINK : "hc",
   webDist: new URL("../../web/dist/", import.meta.url).pathname,
   /** The Mac app's CLI (spec 4.5), else `tailscale` on PATH. */
   tailscale: existsSync(TAILSCALE_APP) ? TAILSCALE_APP : "tailscale",

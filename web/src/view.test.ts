@@ -55,6 +55,14 @@ describe("groupSessions", () => {
     expect(groupSessions([...groups].reverse(), []).map((v) => v.group.name)).toEqual(["rocket", "default"]);
   });
 
+  test("labels the Herdr app's local core by the app's name and a remote one by its machine", () => {
+    const hc: SessionGroup[] = [
+      { source: "hc", name: "local", reachable: true },
+      { source: "hc", name: "vps", reachable: false },
+    ];
+    expect(groupSessions(hc, []).map((v) => v.label)).toEqual(["Herdr 앱", "Herdr 앱 · vps"]);
+  });
+
   test("puts each session into its own group", () => {
     const views = groupSessions(groups, [session("w1:p1", "idle", 1, "rocket"), session("w2:p1", "idle", 2, "default")]);
     expect(views.map((v) => v.sessions.map((s) => s.paneId))).toEqual([["w2:p1"], ["w1:p1"]]);
