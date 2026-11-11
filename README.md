@@ -9,6 +9,7 @@
   <img alt="Node 24" src="https://img.shields.io/badge/Node-%E2%89%A5%2024.18-5fa04e?logo=node.js&logoColor=white">
   <img alt="pnpm 11" src="https://img.shields.io/badge/pnpm-11-f69220?logo=pnpm&logoColor=white">
   <img alt="herdr 0.9" src="https://img.shields.io/badge/herdr-0.9-4b4bb3">
+  <img alt="herdr-core 0.1" src="https://img.shields.io/badge/herdr--core-0.1-4b4bb3">
   <img alt="Tailscale" src="https://img.shields.io/badge/Tailscale-Serve-2f3545?logo=tailscale&logoColor=white">
 </p>
 
@@ -69,7 +70,7 @@ flowchart TB
   </tr>
 </table>
 
-herdr 세션(그룹)별로 묶어서 보여 줍니다. 한 줄에 워크스페이스 라벨, 상태, 제목, 짧은 경로가 있습니다.
+herdr 세션(그룹)별로 묶어서 보여 줍니다. Herdr 앱의 터미널은 "Herdr 앱" 묶음 하나로 나오고, 라벨은 앱의 "space / tab" 이름입니다. 한 줄에 워크스페이스 라벨, 상태, 제목, 짧은 경로가 있습니다.
 
 - **승인 필요.** Claude가 승인 대화상자나 질문을 띄우고 기다리는 중입니다. 목록 맨 위에 테두리를 강조해서 올립니다.
 - **작업 중.** Claude가 도구를 쓰거나 답을 쓰는 중입니다. 상단에 "N 작업 중" 요약이 붙습니다.
@@ -111,7 +112,7 @@ Mac에 떠 있는 Claude Code 화면을 그대로 봅니다. Mac 쪽 창 크기�
 
 - 기본은 **폰 폭에 맞춰 축소**해서 화면 전체와 프롬프트 줄이 다 보입니다. 오른쪽 위 **원래 크기**를 켜면 1:1 크기에 가로 스크롤로 바뀝니다. 왼쪽 위에 실제 크기(예: 155×54)가 보입니다.
 - **키 줄.** Enter, ⌫, 줄 지우기, Esc, ↑, ↓, Tab, Ctrl+C 순서입니다. ⌫는 한 글자를, 줄 지우기(Ctrl+U)는 입력줄 전체를 지웁니다. Ctrl+C는 한 번 누르면 2초 동안 다시 받지 않습니다. 빠르게 두 번 누르면 Claude Code가 종료되기 때문입니다.
-- **글자 입력란.** 쓴 글을 Enter 없이 그대로 Claude Code 입력줄에 넣습니다. 보낸 뒤 Enter 버튼으로 확정합니다. 승인 대화상자에 글로 답할 때, `AskUserQuestion`에 직접 입력할 때 씁니다.
+- **글자 입력란.** 쓴 글을 Enter 없이 그대로 Claude Code 입력줄에 넣습니다. 보낸 뒤 Enter 버튼으로 확정합니다. 승인 대화상자에 글로 답할 때, `AskUserQuestion`에 직접 입력할 때 씁니다. Herdr 앱 세션에서는 영문, 숫자, 띄어쓰기만 넣을 수 있습니다(아래 "알아 둘 것").
 - 대화 기록이 아직 없는 새 세션(첫 메시지 전)은 대화 탭이 잠겨 있습니다. 이때는 터미널 탭에서 글자 입력과 Enter로 시작합니다.
 
 <br clear="all">
